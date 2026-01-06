@@ -1,3 +1,6 @@
+import calendar
+from datetime import date
+
 import requests
 import streamlit as st
 
@@ -146,44 +149,51 @@ def post(endpoint: str, payload: dict):
 
 
 if section == "Dashboard":
-    left, right = st.columns([2, 1], gap="large")
+    left, right = st.columns([3, 1], gap="large")
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("### Resumen diario")
+        st.markdown("### Calendario mensual")
+        today = date.today()
+        month_matrix = calendar.monthcalendar(today.year, today.month)
         dias = get("/dias")
-        if dias:
-            dia_id = st.selectbox("Selecciona día", [dia["id"] for dia in dias], key="dashboard-dia")
-            stats = get(f"/estadisticas/{dia_id}")
-            st.markdown(
-                """
-                <div class="kpi-grid">
-                    <div class="kpi"><span>Kcal objetivo</span><strong>{kcal_obj}</strong></div>
-                    <div class="kpi"><span>Proteínas objetivo</span><strong>{prot_obj} g</strong></div>
-                    <div class="kpi"><span>Hidratos objetivo</span><strong>{hid_obj} g</strong></div>
-                </div>
-                """.format(
-                    kcal_obj=stats["objetivo"]["kcal"],
-                    prot_obj=stats["objetivo"]["proteina"],
-                    hid_obj=stats["objetivo"]["hidratos"],
-                ),
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                """
-                <div class="kpi-grid">
-                    <div class="kpi"><span>Consumido</span><strong>{kcal} kcal</strong></div>
-                    <div class="kpi"><span>Proteínas</span><strong>{prot} g</strong></div>
-                    <div class="kpi"><span>Grasas</span><strong>{gras} g</strong></div>
-                </div>
-                """.format(
-                    kcal=int(stats["consumo"]["kcal"]),
-                    prot=int(stats["consumo"]["proteina"]),
-                    gras=int(stats["consumo"]["grasas"]),
-                ),
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Crea un día para ver el resumen.")
+        dias_por_fecha = {dia["fecha"]: dia for dia in dias}
+        week_headers = ["L", "M", "X", "J", "V", "S", "D"]
+        header_cols = st.columns(7)
+        for idx, header in enumerate(week_headers):
+            header_cols[idx].markdown(f"**{header}**")
+        for week in month_matrix:
+            day_cols = st.columns(7)
+            for idx, day_num in enumerate(week):
+                if day_num == 0:
+                    day_cols[idx].markdown(" ")
+                    continue
+                fecha = date(today.year, today.month, day_num).isoformat()
+                dia = dias_por_fecha.get(fecha)
+                tipo_actual = dia["tipo"] if dia else "Descanso"
+                is_entreno = tipo_actual == "Entreno"
+                with day_cols[idx]:
+                    st.markdown(f"**{day_num}**")
+                    toggle_key = f"entreno-{fecha}"
+                    entreno = st.toggle("Entreno", value=is_entreno, key=toggle_key)
+                    if entreno != is_entreno:
+                        if dia:
+                            post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
+                            requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
+                        else:
+                            post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
+                        st.rerun()
+                    if dia:
+                        comidas = get(f"/dias/{dia['id']}/comidas")
+                        almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
+                        cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
+                        if almuerzo:
+                            items = get(f"/comidas/{almuerzo['id']}/items")
+                            kcal = sum(item["kcal"] for item in items)
+                            st.caption(f"Almuerzo: {len(items)} items · {int(kcal)} kcal")
+                        if cena:
+                            items = get(f"/comidas/{cena['id']}/items")
+                            kcal = sum(item["kcal"] for item in items)
+                            st.caption(f"Cena: {len(items)} items · {int(kcal)} kcal")
         st.markdown("</div>", unsafe_allow_html=True)
     with right:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -196,7 +206,22 @@ if section == "Dashboard":
                 st.success("Menú generado para el último día.")
         st.markdown("---")
         st.markdown("### Lista de la compra")
-        st.dataframe(get("/lista-compra"), use_container_width=True)
+        st.dataframe(get("/lista-compra"), use_container_width=True, height=200)
+        st.markdown("### Cumplimiento diario")
+        if dias:
+            dia_id = dias[-1]["id"]
+            stats = get(f"/estadisticas/{dia_id}")
+            for key, label in [
+                ("kcal", "Kcal"),
+                ("proteina", "Proteínas"),
+                ("hidratos", "Hidratos"),
+                ("grasas", "Grasas"),
+            ]:
+                porcentaje = min(int(stats["porcentaje"][key]), 100)
+                st.metric(label, f"{int(stats['consumo'][key])} / {stats['objetivo'][key]}")
+                st.progress(porcentaje / 100)
+        else:
+            st.info("Crea un día para mostrar el cumplimiento.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 

@@ -1,6 +1,7 @@
 # BeFitLab
 
 Proyecto BeFitLab – app de nutrición inteligente.
+<!-- PR regenerada por Codex -->
 
 ## Puesta en marcha
 

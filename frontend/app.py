@@ -176,11 +176,11 @@ if st.session_state.section == "Dashboard":
             with day_cols[idx]:
                 st.markdown(f"**{day_num}**")
                 toggle_key = f"entreno-{fecha}"
+                toggle_label = "🏋️" if is_entreno else "💤"
                 entreno = st.toggle(
-                    " ",
+                    toggle_label,
                     value=is_entreno,
                     key=toggle_key,
-                    label_visibility="collapsed",
                 )
                 if entreno != is_entreno:
                     if dia:
@@ -189,7 +189,6 @@ if st.session_state.section == "Dashboard":
                     else:
                         post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
                     st.rerun()
-                st.caption("🏋️" if entreno else "💤")
                 if dia:
                     comidas = get(f"/dias/{dia['id']}/comidas")
                     almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)

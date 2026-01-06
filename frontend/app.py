@@ -28,8 +28,10 @@ st.markdown(
     }
     header, footer {visibility: hidden;}
     section[data-testid="stSidebar"] {
-        background: var(--panel);
-        border-right: 1px solid #e2e8f0;
+        display: none;
+    }
+    [data-testid="stAppViewContainer"] {
+        margin-left: 0;
     }
     .sidebar-title {
         font-size: 1.2rem;
@@ -115,19 +117,17 @@ st.markdown(
 )
 
 
-st.sidebar.markdown('<div class="sidebar-title">BeFitLab</div>', unsafe_allow_html=True)
-section = st.sidebar.radio(
-    "Main",
-    [
-        "Dashboard",
-        "Días y comidas",
-        "Generador",
-        "Despensa",
-        "Lista de la compra",
-        "Estadísticas",
-        "Consumo real",
-    ],
-)
+SECTIONS = [
+    "Dashboard",
+    "Días y comidas",
+    "Generador",
+    "Despensa",
+    "Lista de la compra",
+    "Estadísticas",
+    "Consumo real",
+]
+if "section" not in st.session_state:
+    st.session_state.section = "Dashboard"
 
 st.markdown(
     """
@@ -148,7 +148,7 @@ def post(endpoint: str, payload: dict):
     return requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10).json()
 
 
-if section == "Dashboard":
+if st.session_state.section == "Dashboard":
     left, right = st.columns([3, 1], gap="large")
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -174,7 +174,7 @@ if section == "Dashboard":
                 with day_cols[idx]:
                     st.markdown(f"**{day_num}**")
                     toggle_key = f"entreno-{fecha}"
-                    entreno = st.toggle("Entreno", value=is_entreno, key=toggle_key)
+                    entreno = st.toggle("🏋️", value=is_entreno, key=toggle_key, help="🏋️ Entreno / 💤 Descanso")
                     if entreno != is_entreno:
                         if dia:
                             post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
@@ -182,6 +182,7 @@ if section == "Dashboard":
                         else:
                             post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
                         st.rerun()
+                    st.caption("🏋️" if entreno else "💤")
                     if dia:
                         comidas = get(f"/dias/{dia['id']}/comidas")
                         almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
@@ -225,7 +226,7 @@ if section == "Dashboard":
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-elif section == "Días y comidas":
+elif st.session_state.section == "Días y comidas":
     st.subheader("Crear día")
     with st.form("crear-dia"):
         fecha = st.text_input("Fecha (YYYY-MM-DD)")
@@ -238,7 +239,7 @@ elif section == "Días y comidas":
     st.dataframe(get("/dias"))
 
 
-elif section == "Generador":
+elif st.session_state.section == "Generador":
     st.subheader("Generar menú")
     dias = get("/dias")
     if dias:
@@ -255,19 +256,19 @@ elif section == "Generador":
         st.info("Crea un día antes de generar.")
 
 
-elif section == "Despensa":
+elif st.session_state.section == "Despensa":
     st.subheader("Despensa disponible")
     st.dataframe(get("/despensa", {"estado": "disponible"}))
     st.subheader("Despensa agotada")
     st.dataframe(get("/despensa", {"estado": "agotado"}))
 
 
-elif section == "Lista de la compra":
+elif st.session_state.section == "Lista de la compra":
     st.subheader("Lista automática")
     st.dataframe(get("/lista-compra"))
 
 
-elif section == "Estadísticas":
+elif st.session_state.section == "Estadísticas":
     st.subheader("Resumen diario")
     dias = get("/dias")
     if dias:
@@ -278,7 +279,7 @@ elif section == "Estadísticas":
         st.info("Crea un día para ver estadísticas.")
 
 
-elif section == "Consumo real":
+elif st.session_state.section == "Consumo real":
     st.subheader("Confirmar consumo")
     dias = get("/dias")
     if dias:
@@ -305,3 +306,11 @@ elif section == "Consumo real":
                     st.success("Registro guardado.")
     else:
         st.info("Crea un día antes de registrar consumo.")
+
+
+st.markdown("---")
+nav_cols = st.columns(len(SECTIONS))
+for idx, name in enumerate(SECTIONS):
+    if nav_cols[idx].button(name, use_container_width=True):
+        st.session_state.section = name
+        st.rerun()

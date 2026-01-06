@@ -1,5 +1,6 @@
 import calendar
 from datetime import date
+from json import JSONDecodeError
 
 import requests
 import streamlit as st
@@ -90,12 +91,38 @@ st.markdown(
         margin-top: 0.2rem;
     }
     .stButton > button {
-        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+        background: var(--accent-2);
         border: none;
         color: #ffffff;
         border-radius: 999px;
         padding: 0.45rem 1rem;
         font-weight: 600;
+    }
+    .calendar-day {
+        font-weight: 600;
+    }
+    div[data-testid="stVerticalBlock"]:has(.calendar-scope) div[data-testid="column"] {
+        padding: 0 !important;
+    }
+    div[data-testid="stVerticalBlock"]:has(.calendar-scope) div[data-testid="stHorizontalBlock"] {
+        gap: 0 !important;
+    }
+    div[data-testid="stVerticalBlock"]:has(.calendar-scope) div[data-testid="column"] > div {
+        background: var(--panel);
+        border: 1px solid #e2e8f0;
+        border-radius: 0;
+        padding: 0.55rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        min-height: 0;
+        height: var(--calendar-cell-height);
+    }
+    div[data-testid="stToggle"] input:checked + div {
+        background-color: #22c55e !important;
+    }
+    div[data-testid="stToggle"] input:checked + div > div {
+        background-color: #ffffff !important;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.5rem;
@@ -142,11 +169,22 @@ st.markdown(
 
 
 def get(endpoint: str, params: dict | None = None):
-    return requests.get(f"{API_URL}{endpoint}", params=params, timeout=10).json()
+    response = requests.get(f"{API_URL}{endpoint}", params=params, timeout=10)
+    return parse_response(response)
 
 
 def post(endpoint: str, payload: dict):
-    return requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10).json()
+    response = requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10)
+    return parse_response(response)
+
+
+def parse_response(response: requests.Response) -> dict | list:
+    if not response.content:
+        return {}
+    try:
+        return response.json()
+    except (JSONDecodeError, ValueError):
+        return {}
 
 
 def format_fecha(fecha: date) -> str:
@@ -159,48 +197,57 @@ if st.session_state.section == "Dashboard":
     month_matrix = calendar.monthcalendar(today.year, today.month)
     dias = get("/dias")
     dias_por_fecha = {dia["fecha"]: dia for dia in dias}
-    week_headers = ["L", "M", "X", "J", "V", "S", "D"]
-    header_cols = st.columns(7)
-    for idx, header in enumerate(week_headers):
-        header_cols[idx].markdown(f"**{header}**")
-    for week in month_matrix:
-        day_cols = st.columns(7)
-        for idx, day_num in enumerate(week):
-            if day_num == 0:
-                day_cols[idx].markdown(" ")
-                continue
-            fecha = format_fecha(date(today.year, today.month, day_num))
-            dia = dias_por_fecha.get(fecha)
-            tipo_actual = dia["tipo"] if dia else "Descanso"
-            is_entreno = tipo_actual == "Entreno"
-            with day_cols[idx]:
-                st.markdown(f"**{day_num}**")
-                toggle_key = f"entreno-{fecha}"
-                toggle_label = "🏋️" if is_entreno else "💤"
-                entreno = st.toggle(
-                    toggle_label,
-                    value=is_entreno,
-                    key=toggle_key,
-                )
-                if entreno != is_entreno:
+    total_rows = len(month_matrix)
+    calendar_container = st.container()
+    with calendar_container:
+        st.markdown(
+            f"<style>:root {{ --calendar-cell-height: calc((100vh - 260px) / {total_rows}); }}</style>",
+            unsafe_allow_html=True,
+        )
+        st.markdown('<div class="calendar-scope"></div>', unsafe_allow_html=True)
+        for week in month_matrix:
+            day_cols = st.columns(7)
+            for idx, day_num in enumerate(week):
+                with day_cols[idx]:
+                    if day_num == 0:
+                        st.markdown("&nbsp;", unsafe_allow_html=True)
+                        continue
+                    fecha = format_fecha(date(today.year, today.month, day_num))
+                    dia = dias_por_fecha.get(fecha)
+                    tipo_actual = dia["tipo"] if dia else "Entreno"
+                    is_entreno = tipo_actual == "Entreno"
+                    st.markdown(f'<div class="calendar-day">{day_num}</div>', unsafe_allow_html=True)
+                    toggle_key = f"entreno-{fecha}"
+                    toggle_label = "🏋️" if is_entreno else "💤"
+                    entreno = st.toggle(
+                        toggle_label,
+                        value=is_entreno,
+                        key=toggle_key,
+                    )
+                    if entreno != is_entreno:
+                        if dia:
+                            post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
+                            response = requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
+                            _ = parse_response(response)
+                        else:
+                            post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
+                        st.rerun()
+                    almuerzo_text = "Almuerzo: pendiente"
+                    cena_text = "Cena: pendiente"
                     if dia:
-                        post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
-                        requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
-                    else:
-                        post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
-                    st.rerun()
-                if dia:
-                    comidas = get(f"/dias/{dia['id']}/comidas")
-                    almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
-                    cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
-                    if almuerzo:
-                        items = get(f"/comidas/{almuerzo['id']}/items")
-                        kcal = sum(item["kcal"] for item in items)
-                        st.caption(f"Almuerzo: {len(items)} items · {int(kcal)} kcal")
-                    if cena:
-                        items = get(f"/comidas/{cena['id']}/items")
-                        kcal = sum(item["kcal"] for item in items)
-                        st.caption(f"Cena: {len(items)} items · {int(kcal)} kcal")
+                        comidas = get(f"/dias/{dia['id']}/comidas")
+                        almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
+                        cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
+                        if almuerzo:
+                            items = get(f"/comidas/{almuerzo['id']}/items")
+                            kcal = sum(item["kcal"] for item in items)
+                            almuerzo_text = f"Almuerzo: {len(items)} items · {int(kcal)} kcal"
+                        if cena:
+                            items = get(f"/comidas/{cena['id']}/items")
+                            kcal = sum(item["kcal"] for item in items)
+                            cena_text = f"Cena: {len(items)} items · {int(kcal)} kcal"
+                    st.caption(almuerzo_text)
+                    st.caption(cena_text)
 
 
 elif st.session_state.section == "Perfil":

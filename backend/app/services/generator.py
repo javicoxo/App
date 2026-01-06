@@ -2,9 +2,10 @@ import random
 
 from ..crud import (
     add_lista_compra,
+    get_objetivo,
     list_alimentos,
-    list_despensa,
     list_comida_items,
+    list_despensa,
     update_comida_item,
     update_comida_item_detalle,
 )
@@ -23,9 +24,13 @@ POSTRE_VALIDO = {"lácteos", "fruta", "cereales", "frutos secos"}
 
 
 def objetivos_por_tipo(tipo: str) -> dict:
-    if tipo == "Entreno":
-        return {"kcal": 2400, "proteina": 150, "hidratos": 260, "grasas": 70}
-    return {"kcal": 2000, "proteina": 140, "hidratos": 180, "grasas": 90}
+    objetivo = get_objetivo(tipo)
+    return {
+        "kcal": objetivo["kcal"],
+        "proteina": objetivo["proteina"],
+        "hidratos": objetivo["hidratos"],
+        "grasas": objetivo["grasas"],
+    }
 
 
 def _alimentos_por_rol(rol: str) -> list[dict]:

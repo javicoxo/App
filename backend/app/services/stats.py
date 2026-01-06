@@ -1,5 +1,4 @@
-from ..crud import list_comidas, list_comida_items
-from .generator import objetivos_por_tipo
+from ..crud import list_comidas, list_comida_items, get_objetivo
 
 
 def resumen_dia(dia: dict) -> dict:
@@ -12,7 +11,13 @@ def resumen_dia(dia: dict) -> dict:
             totals["proteina"] += item["proteina"]
             totals["hidratos"] += item["hidratos"]
             totals["grasas"] += item["grasas"]
-    objetivo = objetivos_por_tipo(dia["tipo"])
+    objetivo_raw = get_objetivo(dia["tipo"])
+    objetivo = {
+        "kcal": objetivo_raw["kcal"],
+        "proteina": objetivo_raw["proteina"],
+        "hidratos": objetivo_raw["hidratos"],
+        "grasas": objetivo_raw["grasas"],
+    }
     return {
         "objetivo": objetivo,
         "consumo": totals,

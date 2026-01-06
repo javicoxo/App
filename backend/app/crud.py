@@ -37,22 +37,27 @@ def list_alimentos() -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def add_dia(fecha: str, tipo: str) -> int:
+def add_dia(fecha: str, tipo: str) -> str:
     with get_connection() as connection:
-        cursor = connection.execute(
-            "INSERT INTO dias (fecha, tipo) VALUES (?, ?)",
-            (fecha, tipo),
+        connection.execute(
+            "INSERT OR REPLACE INTO dias (id, fecha, tipo) VALUES (?, ?, ?)",
+            (fecha, fecha, tipo),
         )
-        return cursor.lastrowid
+    return fecha
 
 
 def list_dias() -> list[dict]:
     with get_connection() as connection:
-        rows = connection.execute("SELECT * FROM dias ORDER BY fecha").fetchall()
+        rows = connection.execute(
+            """
+            SELECT * FROM dias
+            ORDER BY substr(fecha, 7, 4), substr(fecha, 4, 2), substr(fecha, 1, 2)
+            """
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
-def update_dia_tipo(dia_id: int, tipo: str) -> None:
+def update_dia_tipo(dia_id: str, tipo: str) -> None:
     with get_connection() as connection:
         connection.execute(
             "UPDATE dias SET tipo = ? WHERE id = ?",
@@ -60,7 +65,7 @@ def update_dia_tipo(dia_id: int, tipo: str) -> None:
         )
 
 
-def add_comida(dia_id: int, nombre: str, postre_obligatorio: bool) -> int:
+def add_comida(dia_id: str, nombre: str, postre_obligatorio: bool) -> int:
     with get_connection() as connection:
         cursor = connection.execute(
             "INSERT INTO comidas (dia_id, nombre, postre_obligatorio) VALUES (?, ?, ?)",
@@ -69,7 +74,7 @@ def add_comida(dia_id: int, nombre: str, postre_obligatorio: bool) -> int:
         return cursor.lastrowid
 
 
-def list_comidas(dia_id: int) -> list[dict]:
+def list_comidas(dia_id: str) -> list[dict]:
     with get_connection() as connection:
         rows = connection.execute(
             "SELECT * FROM comidas WHERE dia_id = ? ORDER BY id",
@@ -253,7 +258,7 @@ def record_consumo(item_id: int, estado: str, gramos: float) -> None:
         )
 
 
-def list_consumo_por_dia(dia_id: int) -> list[dict]:
+def list_consumo_por_dia(dia_id: str) -> list[dict]:
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -276,4 +281,98 @@ def record_aprendizaje(evento: str, detalle: str) -> None:
             VALUES (?, ?, ?)
             """,
             (evento, detalle, datetime.utcnow().isoformat()),
+        )
+
+
+def _objetivos_por_defecto() -> dict:
+    return {
+        "Entreno": {"kcal": 2400, "proteina": 150, "hidratos": 260, "grasas": 70},
+        "Descanso": {"kcal": 2000, "proteina": 140, "hidratos": 180, "grasas": 90},
+    }
+
+
+def ensure_objetivos() -> None:
+    with get_connection() as connection:
+        rows = connection.execute("SELECT tipo FROM objetivos_dia").fetchall()
+        if rows:
+            return
+        defaults = _objetivos_por_defecto()
+        connection.executemany(
+            """
+            INSERT INTO objetivos_dia (tipo, kcal, proteina, hidratos, grasas)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    tipo,
+                    valores["kcal"],
+                    valores["proteina"],
+                    valores["hidratos"],
+                    valores["grasas"],
+                )
+                for tipo, valores in defaults.items()
+            ],
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO ajustes_app (clave, valor)
+            VALUES ('default_tipo', 'Descanso')
+            """
+        )
+
+
+def list_objetivos() -> list[dict]:
+    ensure_objetivos()
+    with get_connection() as connection:
+        rows = connection.execute("SELECT * FROM objetivos_dia").fetchall()
+    return [dict(row) for row in rows]
+
+
+def upsert_objetivo(tipo: str, kcal: float, proteina: float, hidratos: float, grasas: float) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO objetivos_dia (tipo, kcal, proteina, hidratos, grasas)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(tipo) DO UPDATE SET
+                kcal = excluded.kcal,
+                proteina = excluded.proteina,
+                hidratos = excluded.hidratos,
+                grasas = excluded.grasas
+            """,
+            (tipo, kcal, proteina, hidratos, grasas),
+        )
+
+
+def get_objetivo(tipo: str) -> dict:
+    ensure_objetivos()
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM objetivos_dia WHERE tipo = ?",
+            (tipo,),
+        ).fetchone()
+    if row:
+        return dict(row)
+    defaults = _objetivos_por_defecto()[tipo]
+    return {"tipo": tipo, **defaults}
+
+
+def get_default_tipo() -> str:
+    ensure_objetivos()
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT valor FROM ajustes_app WHERE clave = 'default_tipo'"
+        ).fetchone()
+    return row["valor"] if row else "Descanso"
+
+
+def set_default_tipo(tipo: str) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO ajustes_app (clave, valor)
+            VALUES ('default_tipo', ?)
+            ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor
+            """,
+            (tipo,),
         )

@@ -21,12 +21,12 @@ class AlimentoCreate(AlimentoBase):
 
 
 class DiaCreate(BaseModel):
-    fecha: str
+    fecha: str = Field(pattern="^\\d{2}/\\d{2}/\\d{4}$")
     tipo: str = Field(pattern="^(Entreno|Descanso)$")
 
 
 class ComidaCreate(BaseModel):
-    dia_id: int
+    dia_id: str
     nombre: str
     postre_obligatorio: bool = False
 
@@ -46,7 +46,7 @@ class ComidaItemCreate(BaseModel):
 
 
 class GeneracionRequest(BaseModel):
-    dia_id: int
+    dia_id: str
 
 
 class GolosinaRequest(BaseModel):
@@ -79,3 +79,16 @@ class PantryUpdate(BaseModel):
 class ShoppingUpdate(BaseModel):
     item_id: int
     comprado: bool
+
+
+class ObjetivoDia(BaseModel):
+    tipo: str = Field(pattern="^(Entreno|Descanso)$")
+    kcal: float
+    proteina: float
+    hidratos: float
+    grasas: float
+
+
+class PerfilUpdate(BaseModel):
+    default_tipo: str = Field(pattern="^(Entreno|Descanso)$")
+    objetivos: list[ObjetivoDia]

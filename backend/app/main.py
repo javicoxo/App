@@ -9,6 +9,7 @@ from .schemas import (
     DiaCreate,
     GeneracionRequest,
     GolosinaRequest,
+    PerfilUpdate,
     PantryUpdate,
     ShoppingUpdate,
     SustitucionRequest,
@@ -51,7 +52,7 @@ def listar_dias():
 
 
 @app.put("/dias/{dia_id}")
-def actualizar_dia(dia_id: int, dia: DiaCreate):
+def actualizar_dia(dia_id: str, dia: DiaCreate):
     dias = [item for item in crud.list_dias() if item["id"] == dia_id]
     if not dias:
         raise HTTPException(status_code=404, detail="Día no encontrado")
@@ -66,7 +67,7 @@ def crear_comida(comida: ComidaCreate):
 
 
 @app.get("/dias/{dia_id}/comidas")
-def listar_comidas(dia_id: int):
+def listar_comidas(dia_id: str):
     return crud.list_comidas(dia_id)
 
 
@@ -130,7 +131,7 @@ def confirmar_consumo(update: ConsumoUpdate):
 
 
 @app.get("/estadisticas/{dia_id}")
-def estadisticas_dia(dia_id: int):
+def estadisticas_dia(dia_id: str):
     dias = [dia for dia in crud.list_dias() if dia["id"] == dia_id]
     if not dias:
         raise HTTPException(status_code=404, detail="Día no encontrado")
@@ -156,4 +157,24 @@ def listar_compra():
 @app.post("/lista-compra")
 def actualizar_compra(update: ShoppingUpdate):
     crud.update_lista_compra(update.item_id, update.comprado)
+    return {"status": "ok"}
+
+
+@app.get("/perfil")
+def obtener_perfil():
+    objetivos = crud.list_objetivos()
+    return {"default_tipo": crud.get_default_tipo(), "objetivos": objetivos}
+
+
+@app.put("/perfil")
+def actualizar_perfil(payload: PerfilUpdate):
+    crud.set_default_tipo(payload.default_tipo)
+    for objetivo in payload.objetivos:
+        crud.upsert_objetivo(
+            objetivo.tipo,
+            objetivo.kcal,
+            objetivo.proteina,
+            objetivo.hidratos,
+            objetivo.grasas,
+        )
     return {"status": "ok"}

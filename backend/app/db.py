@@ -31,7 +31,7 @@ def init_db() -> None:
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS dias (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT PRIMARY KEY,
                 fecha TEXT NOT NULL,
                 tipo TEXT NOT NULL
             )
@@ -41,7 +41,7 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS comidas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dia_id INTEGER NOT NULL,
+                dia_id TEXT NOT NULL,
                 nombre TEXT NOT NULL,
                 postre_obligatorio INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(dia_id) REFERENCES dias(id)
@@ -104,6 +104,25 @@ def init_db() -> None:
                 evento TEXT NOT NULL,
                 detalle TEXT NOT NULL,
                 creado_en TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS objetivos_dia (
+                tipo TEXT PRIMARY KEY,
+                kcal REAL NOT NULL,
+                proteina REAL NOT NULL,
+                hidratos REAL NOT NULL,
+                grasas REAL NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ajustes_app (
+                clave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL
             )
             """
         )

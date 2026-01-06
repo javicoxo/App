@@ -181,6 +181,11 @@ def post(endpoint: str, payload: dict):
 def parse_response(response: requests.Response) -> dict | list:
     if not response.content:
         return {}
+    content_type = response.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        return {}
+    if not response.text.strip():
+        return {}
     try:
         return response.json()
     except (JSONDecodeError, ValueError):

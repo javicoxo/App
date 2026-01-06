@@ -52,6 +52,14 @@ def list_dias() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def update_dia_tipo(dia_id: int, tipo: str) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE dias SET tipo = ? WHERE id = ?",
+            (tipo, dia_id),
+        )
+
+
 def add_comida(dia_id: int, nombre: str, postre_obligatorio: bool) -> int:
     with get_connection() as connection:
         cursor = connection.execute(

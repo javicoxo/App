@@ -1,3 +1,6 @@
+import calendar
+from datetime import date
+
 import requests
 import streamlit as st
 
@@ -10,14 +13,13 @@ st.markdown(
     """
     <style>
     :root {
-        --bg: #0b0f14;
-        --panel: #121923;
-        --panel-2: #0f1620;
-        --accent: #6dd3fb;
-        --accent-2: #8b5cf6;
-        --text: #e6eef7;
-        --muted: #8a9bb5;
-        --success: #36c990;
+        --bg: #f7f8fb;
+        --panel: #ffffff;
+        --panel-2: #f1f4f9;
+        --accent: #2563eb;
+        --accent-2: #10b981;
+        --text: #0f172a;
+        --muted: #64748b;
     }
     html, body, [class*="stApp"] {
         background-color: var(--bg);
@@ -26,8 +28,10 @@ st.markdown(
     }
     header, footer {visibility: hidden;}
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0c1118 0%, #0a0f15 100%);
-        border-right: 1px solid #161f2b;
+        display: none;
+    }
+    [data-testid="stAppViewContainer"] {
+        margin-left: 0;
     }
     .sidebar-title {
         font-size: 1.2rem;
@@ -45,12 +49,11 @@ st.markdown(
         margin-top: 0.3rem;
     }
     .card {
-        background: radial-gradient(circle at top right, rgba(139,92,246,0.15), transparent 55%),
-                    linear-gradient(180deg, #121a24 0%, #0f1620 100%);
-        border: 1px solid #1c2533;
+        background: var(--panel);
+        border: 1px solid #e2e8f0;
         border-radius: 18px;
         padding: 1.25rem;
-        box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
     }
     .card h3, .card h4 {
         margin-top: 0;
@@ -62,7 +65,7 @@ st.markdown(
         gap: 0.35rem;
         padding: 0.3rem 0.6rem;
         border-radius: 999px;
-        background: rgba(109, 211, 251, 0.15);
+        background: rgba(37, 99, 235, 0.12);
         color: var(--accent);
         font-size: 0.8rem;
     }
@@ -72,10 +75,10 @@ st.markdown(
         gap: 1rem;
     }
     .kpi {
-        background: #0f1722;
+        background: var(--panel-2);
         border-radius: 14px;
         padding: 0.9rem 1rem;
-        border: 1px solid #1b2432;
+        border: 1px solid #e2e8f0;
     }
     .kpi span {
         color: var(--muted);
@@ -89,7 +92,7 @@ st.markdown(
     .stButton > button {
         background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
         border: none;
-        color: #0b0f14;
+        color: #ffffff;
         border-radius: 999px;
         padding: 0.45rem 1rem;
         font-weight: 600;
@@ -98,11 +101,11 @@ st.markdown(
         gap: 0.5rem;
     }
     .stTabs [data-baseweb="tab"] {
-        background: #0f1722;
+        background: var(--panel);
         border-radius: 999px;
         color: var(--muted);
         padding: 0.4rem 1rem;
-        border: 1px solid #1b2432;
+        border: 1px solid #e2e8f0;
     }
     .stTabs [data-baseweb="tab"][aria-selected="true"] {
         color: var(--text);
@@ -114,19 +117,17 @@ st.markdown(
 )
 
 
-st.sidebar.markdown('<div class="sidebar-title">BeFitLab</div>', unsafe_allow_html=True)
-section = st.sidebar.radio(
-    "Main",
-    [
-        "Dashboard",
-        "Días y comidas",
-        "Generador",
-        "Despensa",
-        "Lista de la compra",
-        "Estadísticas",
-        "Consumo real",
-    ],
-)
+SECTIONS = [
+    "Dashboard",
+    "Días y comidas",
+    "Generador",
+    "Despensa",
+    "Lista de la compra",
+    "Estadísticas",
+    "Consumo real",
+]
+if "section" not in st.session_state:
+    st.session_state.section = "Dashboard"
 
 st.markdown(
     """
@@ -147,45 +148,53 @@ def post(endpoint: str, payload: dict):
     return requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10).json()
 
 
-if section == "Dashboard":
-    left, right = st.columns([2, 1], gap="large")
+if st.session_state.section == "Dashboard":
+    left, right = st.columns([3, 1], gap="large")
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("### Resumen diario")
+        st.markdown("### Calendario mensual")
+        today = date.today()
+        month_matrix = calendar.monthcalendar(today.year, today.month)
         dias = get("/dias")
-        if dias:
-            dia_id = st.selectbox("Selecciona día", [dia["id"] for dia in dias], key="dashboard-dia")
-            stats = get(f"/estadisticas/{dia_id}")
-            st.markdown(
-                """
-                <div class="kpi-grid">
-                    <div class="kpi"><span>Kcal objetivo</span><strong>{kcal_obj}</strong></div>
-                    <div class="kpi"><span>Proteínas objetivo</span><strong>{prot_obj} g</strong></div>
-                    <div class="kpi"><span>Hidratos objetivo</span><strong>{hid_obj} g</strong></div>
-                </div>
-                """.format(
-                    kcal_obj=stats["objetivo"]["kcal"],
-                    prot_obj=stats["objetivo"]["proteina"],
-                    hid_obj=stats["objetivo"]["hidratos"],
-                ),
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                """
-                <div class="kpi-grid">
-                    <div class="kpi"><span>Consumido</span><strong>{kcal} kcal</strong></div>
-                    <div class="kpi"><span>Proteínas</span><strong>{prot} g</strong></div>
-                    <div class="kpi"><span>Grasas</span><strong>{gras} g</strong></div>
-                </div>
-                """.format(
-                    kcal=int(stats["consumo"]["kcal"]),
-                    prot=int(stats["consumo"]["proteina"]),
-                    gras=int(stats["consumo"]["grasas"]),
-                ),
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Crea un día para ver el resumen.")
+        dias_por_fecha = {dia["fecha"]: dia for dia in dias}
+        week_headers = ["L", "M", "X", "J", "V", "S", "D"]
+        header_cols = st.columns(7)
+        for idx, header in enumerate(week_headers):
+            header_cols[idx].markdown(f"**{header}**")
+        for week in month_matrix:
+            day_cols = st.columns(7)
+            for idx, day_num in enumerate(week):
+                if day_num == 0:
+                    day_cols[idx].markdown(" ")
+                    continue
+                fecha = date(today.year, today.month, day_num).isoformat()
+                dia = dias_por_fecha.get(fecha)
+                tipo_actual = dia["tipo"] if dia else "Descanso"
+                is_entreno = tipo_actual == "Entreno"
+                with day_cols[idx]:
+                    st.markdown(f"**{day_num}**")
+                    toggle_key = f"entreno-{fecha}"
+                    entreno = st.toggle("🏋️", value=is_entreno, key=toggle_key, help="🏋️ Entreno / 💤 Descanso")
+                    if entreno != is_entreno:
+                        if dia:
+                            post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
+                            requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
+                        else:
+                            post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
+                        st.rerun()
+                    st.caption("🏋️" if entreno else "💤")
+                    if dia:
+                        comidas = get(f"/dias/{dia['id']}/comidas")
+                        almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
+                        cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
+                        if almuerzo:
+                            items = get(f"/comidas/{almuerzo['id']}/items")
+                            kcal = sum(item["kcal"] for item in items)
+                            st.caption(f"Almuerzo: {len(items)} items · {int(kcal)} kcal")
+                        if cena:
+                            items = get(f"/comidas/{cena['id']}/items")
+                            kcal = sum(item["kcal"] for item in items)
+                            st.caption(f"Cena: {len(items)} items · {int(kcal)} kcal")
         st.markdown("</div>", unsafe_allow_html=True)
     with right:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -198,11 +207,26 @@ if section == "Dashboard":
                 st.success("Menú generado para el último día.")
         st.markdown("---")
         st.markdown("### Lista de la compra")
-        st.dataframe(get("/lista-compra"), use_container_width=True)
+        st.dataframe(get("/lista-compra"), use_container_width=True, height=200)
+        st.markdown("### Cumplimiento diario")
+        if dias:
+            dia_id = dias[-1]["id"]
+            stats = get(f"/estadisticas/{dia_id}")
+            for key, label in [
+                ("kcal", "Kcal"),
+                ("proteina", "Proteínas"),
+                ("hidratos", "Hidratos"),
+                ("grasas", "Grasas"),
+            ]:
+                porcentaje = min(int(stats["porcentaje"][key]), 100)
+                st.metric(label, f"{int(stats['consumo'][key])} / {stats['objetivo'][key]}")
+                st.progress(porcentaje / 100)
+        else:
+            st.info("Crea un día para mostrar el cumplimiento.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-elif section == "Días y comidas":
+elif st.session_state.section == "Días y comidas":
     st.subheader("Crear día")
     with st.form("crear-dia"):
         fecha = st.text_input("Fecha (YYYY-MM-DD)")
@@ -215,7 +239,7 @@ elif section == "Días y comidas":
     st.dataframe(get("/dias"))
 
 
-elif section == "Generador":
+elif st.session_state.section == "Generador":
     st.subheader("Generar menú")
     dias = get("/dias")
     if dias:
@@ -232,19 +256,19 @@ elif section == "Generador":
         st.info("Crea un día antes de generar.")
 
 
-elif section == "Despensa":
+elif st.session_state.section == "Despensa":
     st.subheader("Despensa disponible")
     st.dataframe(get("/despensa", {"estado": "disponible"}))
     st.subheader("Despensa agotada")
     st.dataframe(get("/despensa", {"estado": "agotado"}))
 
 
-elif section == "Lista de la compra":
+elif st.session_state.section == "Lista de la compra":
     st.subheader("Lista automática")
     st.dataframe(get("/lista-compra"))
 
 
-elif section == "Estadísticas":
+elif st.session_state.section == "Estadísticas":
     st.subheader("Resumen diario")
     dias = get("/dias")
     if dias:
@@ -255,7 +279,7 @@ elif section == "Estadísticas":
         st.info("Crea un día para ver estadísticas.")
 
 
-elif section == "Consumo real":
+elif st.session_state.section == "Consumo real":
     st.subheader("Confirmar consumo")
     dias = get("/dias")
     if dias:
@@ -282,3 +306,11 @@ elif section == "Consumo real":
                     st.success("Registro guardado.")
     else:
         st.info("Crea un día antes de registrar consumo.")
+
+
+st.markdown("---")
+nav_cols = st.columns(len(SECTIONS))
+for idx, name in enumerate(SECTIONS):
+    if nav_cols[idx].button(name, use_container_width=True):
+        st.session_state.section = name
+        st.rerun()

@@ -50,6 +50,15 @@ def listar_dias():
     return crud.list_dias()
 
 
+@app.put("/dias/{dia_id}")
+def actualizar_dia(dia_id: int, dia: DiaCreate):
+    dias = [item for item in crud.list_dias() if item["id"] == dia_id]
+    if not dias:
+        raise HTTPException(status_code=404, detail="Día no encontrado")
+    crud.update_dia_tipo(dia_id, dia.tipo)
+    return {"status": "ok"}
+
+
 @app.post("/comidas")
 def crear_comida(comida: ComidaCreate):
     comida_id = crud.add_comida(comida.dia_id, comida.nombre, comida.postre_obligatorio)

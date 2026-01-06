@@ -169,12 +169,20 @@ st.markdown(
 
 
 def get(endpoint: str, params: dict | None = None):
-    response = requests.get(f"{API_URL}{endpoint}", params=params, timeout=10)
-    return parse_response(response)
+    params_tuple = tuple(sorted((params or {}).items()))
+    return cached_get(endpoint, params_tuple)
 
 
 def post(endpoint: str, payload: dict):
     response = requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10)
+    st.cache_data.clear()
+    return parse_response(response)
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def cached_get(endpoint: str, params_tuple: tuple[tuple[str, str], ...]):
+    params = dict(params_tuple)
+    response = requests.get(f"{API_URL}{endpoint}", params=params or None, timeout=10)
     return parse_response(response)
 
 
@@ -233,6 +241,7 @@ if st.session_state.section == "Dashboard":
                         if dia:
                             post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
                             response = requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
+                            st.cache_data.clear()
                             _ = parse_response(response)
                         else:
                             post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})

@@ -278,10 +278,18 @@ elif st.session_state.section == "Perfil":
         for tab, tipo in zip(tabs, ["Entreno", "Descanso"], strict=False):
             with tab:
                 valores = objetivos.get(tipo, {})
-                kcal = st.number_input(f"Kcal ({tipo})", value=float(valores.get("kcal", 0)), step=10.0)
-                proteina = st.number_input(f"Proteínas g ({tipo})", value=float(valores.get("proteina", 0)), step=1.0)
-                hidratos = st.number_input(f"Hidratos g ({tipo})", value=float(valores.get("hidratos", 0)), step=1.0)
-                grasas = st.number_input(f"Grasas g ({tipo})", value=float(valores.get("grasas", 0)), step=1.0)
+                kcal_base = float(valores.get("kcal", 0))
+                proteina_base = float(valores.get("proteina", 0))
+                hidratos_base = float(valores.get("hidratos", 0))
+                grasas_base = float(valores.get("grasas", 0))
+                kcal = st.number_input(f"Kcal ({tipo})", value=kcal_base, step=10.0)
+                scale = kcal / kcal_base if kcal_base else 0
+                proteina = proteina_base * scale
+                hidratos = hidratos_base * scale
+                grasas = grasas_base * scale
+                st.caption(
+                    f"Proteínas: {proteina:.1f} g · Hidratos: {hidratos:.1f} g · Grasas: {grasas:.1f} g"
+                )
                 objetivos_payload.append(
                     {
                         "tipo": tipo,

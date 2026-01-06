@@ -1,5 +1,6 @@
 import calendar
 from datetime import date
+from json import JSONDecodeError
 
 import requests
 import streamlit as st
@@ -169,12 +170,21 @@ st.markdown(
 
 def get(endpoint: str, params: dict | None = None):
     response = requests.get(f"{API_URL}{endpoint}", params=params, timeout=10)
-    return response.json() if response.content else {}
+    return parse_response(response)
 
 
 def post(endpoint: str, payload: dict):
     response = requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10)
-    return response.json() if response.content else {}
+    return parse_response(response)
+
+
+def parse_response(response: requests.Response) -> dict | list:
+    if not response.content:
+        return {}
+    try:
+        return response.json()
+    except (JSONDecodeError, ValueError):
+        return {}
 
 
 def format_fecha(fecha: date) -> str:
@@ -218,7 +228,7 @@ if st.session_state.section == "Dashboard":
                         if dia:
                             post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
                             response = requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
-                            _ = response.json() if response.content else {}
+                            _ = parse_response(response)
                         else:
                             post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
                         st.rerun()

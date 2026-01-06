@@ -207,8 +207,7 @@ if st.session_state.section == "Dashboard":
             st.markdown(header)
             st.markdown("</div>", unsafe_allow_html=True)
     for week in month_matrix:
-        day_cols = st.columns(7)
-        for idx, day_num in enumerate(week):
+        for day_num in week:
             if day_num == 0:
                 with day_cols[idx]:
                     st.markdown('<div class="calendar-cell empty"></div>', unsafe_allow_html=True)

@@ -97,14 +97,6 @@ st.markdown(
         padding: 0.45rem 1rem;
         font-weight: 600;
     }
-    .calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(7, minmax(0, 1fr));
-        grid-template-rows: repeat(var(--calendar-rows), 1fr);
-        gap: 0.75rem;
-        width: 100%;
-        height: calc(100vh - 240px);
-    }
     .calendar-cell {
         background: var(--panel);
         border: 1px solid #e2e8f0;
@@ -114,6 +106,7 @@ st.markdown(
         flex-direction: column;
         gap: 0.4rem;
         min-height: 0;
+        height: var(--calendar-cell-height);
     }
     .calendar-cell.empty {
         background: transparent;
@@ -182,11 +175,13 @@ st.markdown(
 
 
 def get(endpoint: str, params: dict | None = None):
-    return requests.get(f"{API_URL}{endpoint}", params=params, timeout=10).json()
+    response = requests.get(f"{API_URL}{endpoint}", params=params, timeout=10)
+    return response.json() if response.content else {}
 
 
 def post(endpoint: str, payload: dict):
-    return requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10).json()
+    response = requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10)
+    return response.json() if response.content else {}
 
 
 def format_fecha(fecha: date) -> str:
@@ -202,50 +197,56 @@ if st.session_state.section == "Dashboard":
     week_headers = ["L", "M", "X", "J", "V", "S", "D"]
     total_rows = len(month_matrix) + 1
     st.markdown(
-        f'<div class="calendar-grid" style="--calendar-rows: {total_rows};">',
+        f"<style>:root {{ --calendar-cell-height: calc((100vh - 260px) / {total_rows}); }}</style>",
         unsafe_allow_html=True,
     )
-    for header in week_headers:
-        st.markdown(f'<div class="calendar-cell calendar-header">{header}</div>', unsafe_allow_html=True)
+    header_cols = st.columns(7)
+    for idx, header in enumerate(week_headers):
+        with header_cols[idx]:
+            st.markdown('<div class="calendar-cell calendar-header">', unsafe_allow_html=True)
+            st.markdown(header)
+            st.markdown("</div>", unsafe_allow_html=True)
     for week in month_matrix:
         for day_num in week:
             if day_num == 0:
-                st.markdown('<div class="calendar-cell empty"></div>', unsafe_allow_html=True)
+                with day_cols[idx]:
+                    st.markdown('<div class="calendar-cell empty"></div>', unsafe_allow_html=True)
                 continue
             fecha = format_fecha(date(today.year, today.month, day_num))
             dia = dias_por_fecha.get(fecha)
             tipo_actual = dia["tipo"] if dia else "Entreno"
             is_entreno = tipo_actual == "Entreno"
-            st.markdown('<div class="calendar-cell">', unsafe_allow_html=True)
-            st.markdown(f'<div class="calendar-day">{day_num}</div>', unsafe_allow_html=True)
-            toggle_key = f"entreno-{fecha}"
-            toggle_label = "🏋️" if is_entreno else "💤"
-            entreno = st.toggle(
-                toggle_label,
-                value=is_entreno,
-                key=toggle_key,
-            )
-            if entreno != is_entreno:
+            with day_cols[idx]:
+                st.markdown('<div class="calendar-cell">', unsafe_allow_html=True)
+                st.markdown(f'<div class="calendar-day">{day_num}</div>', unsafe_allow_html=True)
+                toggle_key = f"entreno-{fecha}"
+                toggle_label = "🏋️" if is_entreno else "💤"
+                entreno = st.toggle(
+                    toggle_label,
+                    value=is_entreno,
+                    key=toggle_key,
+                )
+                if entreno != is_entreno:
+                    if dia:
+                        post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
+                        response = requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
+                        _ = response.json() if response.content else {}
+                    else:
+                        post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
+                    st.rerun()
                 if dia:
-                    post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
-                    requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
-                else:
-                    post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
-                st.rerun()
-            if dia:
-                comidas = get(f"/dias/{dia['id']}/comidas")
-                almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
-                cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
-                if almuerzo:
-                    items = get(f"/comidas/{almuerzo['id']}/items")
-                    kcal = sum(item["kcal"] for item in items)
-                    st.caption(f"Almuerzo: {len(items)} items · {int(kcal)} kcal")
-                if cena:
-                    items = get(f"/comidas/{cena['id']}/items")
-                    kcal = sum(item["kcal"] for item in items)
-                    st.caption(f"Cena: {len(items)} items · {int(kcal)} kcal")
-            st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+                    comidas = get(f"/dias/{dia['id']}/comidas")
+                    almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
+                    cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
+                    if almuerzo:
+                        items = get(f"/comidas/{almuerzo['id']}/items")
+                        kcal = sum(item["kcal"] for item in items)
+                        st.caption(f"Almuerzo: {len(items)} items · {int(kcal)} kcal")
+                    if cena:
+                        items = get(f"/comidas/{cena['id']}/items")
+                        kcal = sum(item["kcal"] for item in items)
+                        st.caption(f"Cena: {len(items)} items · {int(kcal)} kcal")
+                st.markdown("</div>", unsafe_allow_html=True)
 
 
 elif st.session_state.section == "Perfil":

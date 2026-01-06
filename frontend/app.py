@@ -141,12 +141,29 @@ st.markdown(
 )
 
 
+def _request_json(response: requests.Response):
+    response.raise_for_status()
+    if not response.content:
+        return {}
+    return response.json()
+
+
 def get(endpoint: str, params: dict | None = None):
-    return requests.get(f"{API_URL}{endpoint}", params=params, timeout=10).json()
+    try:
+        response = requests.get(f"{API_URL}{endpoint}", params=params, timeout=10)
+        return _request_json(response)
+    except requests.RequestException as exc:
+        st.error(f"Error consultando la API: {exc}")
+        return {}
 
 
 def post(endpoint: str, payload: dict):
-    return requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10).json()
+    try:
+        response = requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10)
+        return _request_json(response)
+    except requests.RequestException as exc:
+        st.error(f"Error enviando datos a la API: {exc}")
+        return {}
 
 
 def format_fecha(fecha: date) -> str:

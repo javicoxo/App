@@ -1,3 +1,5 @@
+import csv
+import io
 from datetime import date, timedelta
 from json import JSONDecodeError
 
@@ -125,6 +127,7 @@ st.markdown(
 
 SECTIONS = [
     "Programación",
+    "Alimentos",
     "Perfil",
     "Generador",
     "Despensa y compra",
@@ -351,6 +354,192 @@ elif st.session_state.section == "Perfil":
         st.cache_data.clear()
         st.success("Tipo de día guardado.")
         st.rerun()
+
+
+elif st.session_state.section == "Alimentos":
+    st.subheader("Gestión de alimentos")
+    tabs = st.tabs(["Importar CSV", "Recetas", "Open Food Facts"])
+    with tabs[0]:
+        st.markdown("### Importar base de datos (CSV)")
+        delimitador = st.text_input("Delimitador", value=",", max_chars=1)
+        archivo = st.file_uploader("CSV de alimentos", type=["csv"])
+        columnas_requeridas = [
+            "nombre",
+            "kcal_100g",
+            "proteina_100g",
+            "hidratos_100g",
+            "grasas_100g",
+            "rol_principal",
+            "grupo_mediterraneo",
+            "frecuencia_mediterranea",
+            "permitido_comidas",
+            "categorias",
+        ]
+        if archivo is not None:
+            contenido = archivo.getvalue().decode("utf-8-sig")
+            lector = csv.DictReader(io.StringIO(contenido), delimiter=delimitador)
+            if not lector.fieldnames:
+                st.error("El CSV no contiene cabeceras.")
+            else:
+                faltantes = [col for col in columnas_requeridas if col not in lector.fieldnames]
+                if faltantes:
+                    st.error(f"Faltan columnas requeridas: {', '.join(faltantes)}")
+                else:
+                    filas = list(lector)
+                    st.dataframe(filas[:5])
+                    if st.button("Importar alimentos"):
+                        errores = 0
+                        for fila in filas:
+                            try:
+                                payload = {
+                                    "ean": fila.get("ean") or None,
+                                    "nombre": fila["nombre"],
+                                    "marca": fila.get("marca") or None,
+                                    "kcal_100g": float(fila["kcal_100g"]),
+                                    "proteina_100g": float(fila["proteina_100g"]),
+                                    "hidratos_100g": float(fila["hidratos_100g"]),
+                                    "grasas_100g": float(fila["grasas_100g"]),
+                                    "rol_principal": fila["rol_principal"],
+                                    "grupo_mediterraneo": fila["grupo_mediterraneo"],
+                                    "frecuencia_mediterranea": fila["frecuencia_mediterranea"],
+                                    "permitido_comidas": fila["permitido_comidas"],
+                                    "categorias": fila["categorias"],
+                                }
+                                post("/alimentos", payload)
+                            except (ValueError, KeyError):
+                                errores += 1
+                        st.success(f"Importación finalizada. Errores: {errores}.")
+                        st.cache_data.clear()
+    with tabs[1]:
+        st.markdown("### Recetas propias")
+        with st.form("recetas-form"):
+            nombre = st.text_input("Nombre de la receta")
+            ean = st.text_input("EAN (opcional)")
+            marca = st.text_input("Marca (opcional)")
+            kcal_100g = st.number_input("Kcal / 100g", min_value=0.0, step=1.0)
+            proteina_100g = st.number_input("Proteínas / 100g", min_value=0.0, step=0.1)
+            hidratos_100g = st.number_input("Hidratos / 100g", min_value=0.0, step=0.1)
+            grasas_100g = st.number_input("Grasas / 100g", min_value=0.0, step=0.1)
+            rol_principal = st.text_input("Rol nutricional")
+            grupo_mediterraneo = st.text_input("Grupo mediterráneo")
+            frecuencia_mediterranea = st.text_input("Frecuencia mediterránea")
+            permitido_comidas = st.text_input("Comidas permitidas (separadas por coma)")
+            categorias = st.text_input("Categorías")
+            submit = st.form_submit_button("Guardar receta")
+        if submit:
+            if not nombre.strip():
+                st.warning("El nombre es obligatorio.")
+            else:
+                post(
+                    "/alimentos",
+                    {
+                        "ean": ean or None,
+                        "nombre": nombre,
+                        "marca": marca or None,
+                        "kcal_100g": kcal_100g,
+                        "proteina_100g": proteina_100g,
+                        "hidratos_100g": hidratos_100g,
+                        "grasas_100g": grasas_100g,
+                        "rol_principal": rol_principal,
+                        "grupo_mediterraneo": grupo_mediterraneo,
+                        "frecuencia_mediterranea": frecuencia_mediterranea,
+                        "permitido_comidas": permitido_comidas,
+                        "categorias": categorias,
+                    },
+                )
+                st.success("Receta guardada.")
+                st.cache_data.clear()
+    with tabs[2]:
+        st.markdown("### Buscar en Open Food Facts")
+        criterio = st.selectbox("Buscar por", ["Nombre", "EAN"])
+        consulta = st.text_input("Consulta")
+        if st.button("Buscar en Open Food Facts"):
+            if not consulta.strip():
+                st.warning("Introduce un valor de búsqueda.")
+            elif criterio == "EAN":
+                response = requests.get(
+                    f"https://world.openfoodfacts.org/api/v2/product/{consulta.strip()}.json",
+                    timeout=10,
+                )
+                data = response.json() if response.content else {}
+                st.session_state.off_results = [data.get("product")] if data.get("product") else []
+            else:
+                response = requests.get(
+                    "https://world.openfoodfacts.org/cgi/search.pl",
+                    params={"search_terms": consulta.strip(), "search_simple": 1, "action": "process", "json": 1},
+                    timeout=10,
+                )
+                data = response.json() if response.content else {}
+                st.session_state.off_results = data.get("products", [])[:10]
+        productos = st.session_state.get("off_results", [])
+        if productos:
+            opciones = []
+            for producto in productos:
+                nombre_prod = (
+                    producto.get("product_name")
+                    or producto.get("product_name_es")
+                    or producto.get("product_name_en")
+                    or "Sin nombre"
+                )
+                opciones.append(f"{nombre_prod} ({producto.get('code', 'sin EAN')})")
+            seleccion = st.selectbox("Selecciona un producto", opciones)
+            indice = opciones.index(seleccion)
+            producto = productos[indice]
+            nutriments = producto.get("nutriments", {})
+            kcal = nutriments.get("energy-kcal_100g")
+            if kcal is None and nutriments.get("energy_100g"):
+                kcal = float(nutriments.get("energy_100g")) / 4.184
+            kcal = float(kcal or 0)
+            with st.form("off-import"):
+                st.markdown("### Importar alimento")
+                nombre = st.text_input(
+                    "Nombre",
+                    value=producto.get("product_name") or producto.get("product_name_es") or "",
+                )
+                ean = st.text_input("EAN", value=str(producto.get("code") or ""))
+                marca = st.text_input("Marca", value=producto.get("brands") or "")
+                kcal_100g = st.number_input("Kcal / 100g", min_value=0.0, value=float(kcal), step=1.0)
+                proteina_100g = st.number_input(
+                    "Proteínas / 100g", min_value=0.0, value=float(nutriments.get("proteins_100g") or 0), step=0.1
+                )
+                hidratos_100g = st.number_input(
+                    "Hidratos / 100g",
+                    min_value=0.0,
+                    value=float(nutriments.get("carbohydrates_100g") or 0),
+                    step=0.1,
+                )
+                grasas_100g = st.number_input(
+                    "Grasas / 100g", min_value=0.0, value=float(nutriments.get("fat_100g") or 0), step=0.1
+                )
+                rol_principal = st.text_input("Rol nutricional")
+                grupo_mediterraneo = st.text_input("Grupo mediterráneo")
+                frecuencia_mediterranea = st.text_input("Frecuencia mediterránea")
+                permitido_comidas = st.text_input("Comidas permitidas (separadas por coma)")
+                categorias = st.text_input("Categorías")
+                submit = st.form_submit_button("Importar alimento")
+            if submit:
+                if not nombre.strip():
+                    st.warning("El nombre es obligatorio.")
+                else:
+                    post(
+                        "/alimentos",
+                        {
+                            "ean": ean or None,
+                            "nombre": nombre,
+                            "marca": marca or None,
+                            "kcal_100g": kcal_100g,
+                            "proteina_100g": proteina_100g,
+                            "hidratos_100g": hidratos_100g,
+                            "grasas_100g": grasas_100g,
+                            "rol_principal": rol_principal,
+                            "grupo_mediterraneo": grupo_mediterraneo,
+                            "frecuencia_mediterranea": frecuencia_mediterranea,
+                            "permitido_comidas": permitido_comidas,
+                            "categorias": categorias,
+                        },
+                    )
+                    st.success("Alimento importado.")
+                    st.cache_data.clear()
 
 
 elif st.session_state.section == "Generador":

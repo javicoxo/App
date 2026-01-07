@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime
 from typing import Iterable
 
@@ -39,11 +40,18 @@ def list_alimentos() -> list[dict]:
 
 def add_dia(fecha: str, tipo: str) -> str:
     with get_connection() as connection:
-        connection.execute(
-            "INSERT OR REPLACE INTO dias (id, fecha, tipo) VALUES (?, ?, ?)",
-            (fecha, fecha, tipo),
-        )
-    return fecha
+        try:
+            connection.execute(
+                "INSERT OR REPLACE INTO dias (id, fecha, tipo) VALUES (?, ?, ?)",
+                (fecha, fecha, tipo),
+            )
+            return fecha
+        except sqlite3.IntegrityError:
+            cursor = connection.execute(
+                "INSERT INTO dias (fecha, tipo) VALUES (?, ?)",
+                (fecha, tipo),
+            )
+            return str(cursor.lastrowid)
 
 
 def list_dias() -> list[dict]:
@@ -63,6 +71,13 @@ def update_dia_tipo(dia_id: str, tipo: str) -> None:
             "UPDATE dias SET tipo = ? WHERE id = ?",
             (tipo, dia_id),
         )
+
+
+def delete_dia(dia_id: str) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM comida_items WHERE comida_id IN (SELECT id FROM comidas WHERE dia_id = ?)", (dia_id,))
+        connection.execute("DELETE FROM comidas WHERE dia_id = ?", (dia_id,))
+        connection.execute("DELETE FROM dias WHERE id = ?", (dia_id,))
 
 
 def add_comida(dia_id: str, nombre: str, postre_obligatorio: bool) -> int:

@@ -60,6 +60,15 @@ def actualizar_dia(dia_id: str, dia: DiaCreate):
     return {"status": "ok"}
 
 
+@app.delete("/dias/{dia_id}")
+def eliminar_dia(dia_id: str):
+    dias = [item for item in crud.list_dias() if item["id"] == dia_id]
+    if not dias:
+        raise HTTPException(status_code=404, detail="Día no encontrado")
+    crud.delete_dia(dia_id)
+    return {"status": "ok"}
+
+
 @app.post("/comidas")
 def crear_comida(comida: ComidaCreate):
     comida_id = crud.add_comida(comida.dia_id, comida.nombre, comida.postre_obligatorio)

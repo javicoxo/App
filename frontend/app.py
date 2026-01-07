@@ -131,7 +131,6 @@ SECTIONS = [
     "Perfil",
     "Generador",
     "Despensa y compra",
-    "Estadísticas",
     "Consumo real",
 ]
 if "section" not in st.session_state:
@@ -194,6 +193,8 @@ if st.session_state.section == "Programación":
         max_value=date(today.year, 12, 31),
     )
     dias = get("/dias")
+    perfil = get("/perfil")
+    objetivos = {item["tipo"]: item for item in perfil.get("objetivos", [])}
     dias_por_fecha = {dia["fecha"]: dia for dia in dias}
     for offset in range(7):
         fecha = format_fecha(today + timedelta(days=offset))
@@ -204,20 +205,33 @@ if st.session_state.section == "Programación":
             continue
         comidas = get(f"/dias/{dia['id']}/comidas")
         items_totales: list[dict] = []
+        menu_por_comida = []
         for comida in comidas:
-            items_totales.extend(get(f"/comidas/{comida['id']}/items"))
+            items = get(f"/comidas/{comida['id']}/items")
+            items_totales.extend(items)
+            menu_por_comida.append({"nombre": comida["nombre"], "items": items})
         if not items_totales:
             st.info("Sin items generados aún para este día.")
             continue
+        objetivo = objetivos.get(dia.get("tipo", "Entreno"), {})
         kcal_total = sum(item["kcal"] for item in items_totales)
         proteina_total = sum(item["proteina"] for item in items_totales)
         hidratos_total = sum(item["hidratos"] for item in items_totales)
         grasas_total = sum(item["grasas"] for item in items_totales)
+        kcal_obj = float(objetivo.get("kcal", 0) or 0)
+        prot_obj = float(objetivo.get("proteina", 0) or 0)
+        hidr_obj = float(objetivo.get("hidratos", 0) or 0)
+        gras_obj = float(objetivo.get("grasas", 0) or 0)
         kpi_cols = st.columns(4)
         kpi_cols[0].metric("Kcal", f"{int(kcal_total)}")
         kpi_cols[1].metric("Proteínas (g)", f"{int(proteina_total)}")
         kpi_cols[2].metric("Hidratos (g)", f"{int(hidratos_total)}")
         kpi_cols[3].metric("Grasas (g)", f"{int(grasas_total)}")
+        diff_cols = st.columns(4)
+        diff_cols[0].metric("Δ Kcal", f"{int(kcal_total - kcal_obj)}")
+        diff_cols[1].metric("Δ Prot", f"{int(proteina_total - prot_obj)}")
+        diff_cols[2].metric("Δ Hidr", f"{int(hidratos_total - hidr_obj)}")
+        diff_cols[3].metric("Δ Gras", f"{int(grasas_total - gras_obj)}")
         st.bar_chart(
             {
                 "Kcal": kcal_total,
@@ -226,6 +240,9 @@ if st.session_state.section == "Programación":
                 "Grasas (g)": grasas_total,
             }
         )
+        for menu in menu_por_comida:
+            st.markdown(f"**{menu['nombre']}**")
+            st.dataframe(menu["items"])
         if st.button("Eliminar día", key=f"delete-dia-{fecha}"):
             requests.delete(f"{API_URL}/dias/{dia['id']}", timeout=10)
             st.cache_data.clear()
@@ -239,20 +256,33 @@ if st.session_state.section == "Programación":
     else:
         comidas = get(f"/dias/{dia['id']}/comidas")
         items_totales: list[dict] = []
+        menu_por_comida = []
         for comida in comidas:
-            items_totales.extend(get(f"/comidas/{comida['id']}/items"))
+            items = get(f"/comidas/{comida['id']}/items")
+            items_totales.extend(items)
+            menu_por_comida.append({"nombre": comida["nombre"], "items": items})
         if not items_totales:
             st.info("Sin items generados aún para este día.")
         else:
+            objetivo = objetivos.get(dia.get("tipo", "Entreno"), {})
             kcal_total = sum(item["kcal"] for item in items_totales)
             proteina_total = sum(item["proteina"] for item in items_totales)
             hidratos_total = sum(item["hidratos"] for item in items_totales)
             grasas_total = sum(item["grasas"] for item in items_totales)
+            kcal_obj = float(objetivo.get("kcal", 0) or 0)
+            prot_obj = float(objetivo.get("proteina", 0) or 0)
+            hidr_obj = float(objetivo.get("hidratos", 0) or 0)
+            gras_obj = float(objetivo.get("grasas", 0) or 0)
             kpi_cols = st.columns(4)
             kpi_cols[0].metric("Kcal", f"{int(kcal_total)}")
             kpi_cols[1].metric("Proteínas (g)", f"{int(proteina_total)}")
             kpi_cols[2].metric("Hidratos (g)", f"{int(hidratos_total)}")
             kpi_cols[3].metric("Grasas (g)", f"{int(grasas_total)}")
+            diff_cols = st.columns(4)
+            diff_cols[0].metric("Δ Kcal", f"{int(kcal_total - kcal_obj)}")
+            diff_cols[1].metric("Δ Prot", f"{int(proteina_total - prot_obj)}")
+            diff_cols[2].metric("Δ Hidr", f"{int(hidratos_total - hidr_obj)}")
+            diff_cols[3].metric("Δ Gras", f"{int(grasas_total - gras_obj)}")
             st.bar_chart(
                 {
                     "Kcal": kcal_total,
@@ -261,6 +291,9 @@ if st.session_state.section == "Programación":
                     "Grasas (g)": grasas_total,
                 }
             )
+            for menu in menu_por_comida:
+                st.markdown(f"**{menu['nombre']}**")
+                st.dataframe(menu["items"])
 
 
 elif st.session_state.section == "Perfil":
@@ -636,17 +669,6 @@ elif st.session_state.section == "Despensa y compra":
                     )
                     st.cache_data.clear()
                     st.rerun()
-
-
-elif st.session_state.section == "Estadísticas":
-    st.subheader("Resumen diario")
-    dias = get("/dias")
-    if dias:
-        dia_id = st.selectbox("Selecciona día", [dia["id"] for dia in dias])
-        stats = get(f"/estadisticas/{dia_id}")
-        st.json(stats)
-    else:
-        st.info("Crea un día para ver estadísticas.")
 
 
 elif st.session_state.section == "Consumo real":

@@ -62,7 +62,11 @@ def _permitido_para_comida(alimento: dict, comida: str) -> bool:
     if not permitido:
         return True
     permitidos = {item.strip().lower() for item in permitido.replace(";", ",").split(",")}
-    return comida.lower() in permitidos
+    if comida.lower() in permitidos:
+        return True
+    if comida == "Media mañana":
+        return "desayuno" in permitidos or "merienda" in permitidos
+    return False
 
 
 def _es_cereal_o_pan(alimento: dict) -> bool:
@@ -414,6 +418,8 @@ def registrar_faltantes(items: list[dict]) -> None:
     for item in items:
         if item.get("ean") and item["ean"] not in disponibles:
             add_lista_compra(item["ean"], item["nombre"])
+        elif not item.get("ean"):
+            add_lista_compra(None, item["nombre"])
 
 
 def sustituir_item(item: dict) -> dict | None:

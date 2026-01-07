@@ -232,17 +232,27 @@ if st.session_state.section == "Programación":
         diff_cols[1].metric("Δ Prot", f"{int(proteina_total - prot_obj)}")
         diff_cols[2].metric("Δ Hidr", f"{int(hidratos_total - hidr_obj)}")
         diff_cols[3].metric("Δ Gras", f"{int(grasas_total - gras_obj)}")
-        st.bar_chart(
-            {
-                "Kcal": kcal_total,
-                "Proteínas (g)": proteina_total,
-                "Hidratos (g)": hidratos_total,
-                "Grasas (g)": grasas_total,
-            }
+        st.markdown(
+            f"Objetivo → Kcal {int(kcal_obj)} · Prot {int(prot_obj)} · Hidr {int(hidr_obj)} · Gras {int(gras_obj)}"
+        )
+        st.markdown(
+            f"Real → Kcal {int(kcal_total)} · Prot {int(proteina_total)} · Hidr {int(hidratos_total)} · Gras {int(grasas_total)}"
         )
         for menu in menu_por_comida:
             st.markdown(f"**{menu['nombre']}**")
-            st.dataframe(menu["items"])
+            st.dataframe(
+                [
+                    {
+                        "nombre": item.get("nombre"),
+                        "gramos": item.get("gramos"),
+                        "kcal": item.get("kcal"),
+                        "proteina": item.get("proteina"),
+                        "hidratos": item.get("hidratos"),
+                        "grasas": item.get("grasas"),
+                    }
+                    for item in menu["items"]
+                ]
+            )
         if st.button("Eliminar día", key=f"delete-dia-{fecha}"):
             requests.delete(f"{API_URL}/dias/{dia['id']}", timeout=10)
             st.cache_data.clear()
@@ -283,17 +293,27 @@ if st.session_state.section == "Programación":
             diff_cols[1].metric("Δ Prot", f"{int(proteina_total - prot_obj)}")
             diff_cols[2].metric("Δ Hidr", f"{int(hidratos_total - hidr_obj)}")
             diff_cols[3].metric("Δ Gras", f"{int(grasas_total - gras_obj)}")
-            st.bar_chart(
-                {
-                    "Kcal": kcal_total,
-                    "Proteínas (g)": proteina_total,
-                    "Hidratos (g)": hidratos_total,
-                    "Grasas (g)": grasas_total,
-                }
+            st.markdown(
+                f"Objetivo → Kcal {int(kcal_obj)} · Prot {int(prot_obj)} · Hidr {int(hidr_obj)} · Gras {int(gras_obj)}"
+            )
+            st.markdown(
+                f"Real → Kcal {int(kcal_total)} · Prot {int(proteina_total)} · Hidr {int(hidratos_total)} · Gras {int(grasas_total)}"
             )
             for menu in menu_por_comida:
                 st.markdown(f"**{menu['nombre']}**")
-                st.dataframe(menu["items"])
+                st.dataframe(
+                    [
+                        {
+                            "nombre": item.get("nombre"),
+                            "gramos": item.get("gramos"),
+                            "kcal": item.get("kcal"),
+                            "proteina": item.get("proteina"),
+                            "hidratos": item.get("hidratos"),
+                            "grasas": item.get("grasas"),
+                        }
+                        for item in menu["items"]
+                    ]
+                )
 
 
 elif st.session_state.section == "Perfil":
@@ -616,7 +636,19 @@ elif st.session_state.section == "Generador":
         for comida in comidas:
             st.markdown(f"### {comida['nombre']}")
             items = get(f"/comidas/{comida['id']}/items")
-            st.dataframe(items)
+            st.dataframe(
+                [
+                    {
+                        "nombre": item.get("nombre"),
+                        "gramos": item.get("gramos"),
+                        "kcal": item.get("kcal"),
+                        "proteina": item.get("proteina"),
+                        "hidratos": item.get("hidratos"),
+                        "grasas": item.get("grasas"),
+                    }
+                    for item in items
+                ]
+            )
     else:
         st.info("Crea un día antes de generar.")
 

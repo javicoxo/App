@@ -267,11 +267,8 @@ if st.session_state.section == "Dashboard":
 elif st.session_state.section == "Perfil":
     st.subheader("Perfil de usuario")
     perfil = get("/perfil")
-    default_tipo = perfil.get("default_tipo", "Descanso")
     objetivos = {item["tipo"]: item for item in perfil.get("objetivos", [])}
     with st.form("perfil-form"):
-        st.markdown("### Tipo de día por defecto")
-        tipo_default = st.selectbox("Nuevo día:", ["Entreno", "Descanso"], index=0 if default_tipo == "Entreno" else 1)
         st.markdown("### Objetivos por tipo de día")
         tabs = st.tabs(["Entreno", "Descanso"])
         objetivos_payload = []
@@ -303,10 +300,17 @@ elif st.session_state.section == "Perfil":
     if submitted:
         requests.put(
             f"{API_URL}/perfil",
-            json={"default_tipo": tipo_default, "objetivos": objetivos_payload},
+            json={"objetivos": objetivos_payload},
             timeout=10,
         )
         st.success("Perfil actualizado.")
+    with st.form("nuevo-reparto-form"):
+        st.markdown("### Nuevo tipo de día (próximamente)")
+        st.text_input("Nombre del tipo de día", placeholder="Ej: Competición")
+        st.number_input("Proteínas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
+        st.number_input("Hidratos (%)", min_value=0.0, max_value=100.0, value=50.0, step=1.0)
+        st.number_input("Grasas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
+        st.form_submit_button("Guardar (pendiente)")
 
 
 elif st.session_state.section == "Días y comidas":

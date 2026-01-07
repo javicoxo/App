@@ -555,12 +555,27 @@ elif st.session_state.section == "Alimentos":
 
 elif st.session_state.section == "Generador":
     st.subheader("Generar menú")
+    with st.form("crear-dia-generador"):
+        fecha = st.date_input("Fecha")
+        tipo = st.selectbox("Tipo de día", ["Entreno", "Descanso"])
+        submit = st.form_submit_button("Crear y generar menú")
+    if submit:
+        payload = {"fecha": format_fecha(fecha), "tipo": tipo}
+        dia = post("/dias", payload)
+        dia_id = dia.get("id")
+        if dia_id:
+            post("/generador", {"dia_id": dia_id})
+            st.success("Menú generado.")
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.error("No se pudo crear el día.")
     dias = get("/dias")
     if dias:
         dia_id = st.selectbox("Selecciona día", [dia["id"] for dia in dias])
-        if st.button("Generar menú completo"):
+        if st.button("Regenerar menú completo"):
             post("/generador", {"dia_id": dia_id})
-            st.success("Menú generado.")
+            st.success("Menú regenerado.")
             st.cache_data.clear()
             st.rerun()
         comidas = get(f"/dias/{dia_id}/comidas")

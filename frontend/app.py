@@ -1,5 +1,5 @@
-import calendar
-from datetime import date
+from datetime import date, timedelta
+from json import JSONDecodeError
 
 import requests
 import streamlit as st
@@ -90,12 +90,18 @@ st.markdown(
         margin-top: 0.2rem;
     }
     .stButton > button {
-        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+        background: var(--accent-2);
         border: none;
         color: #ffffff;
         border-radius: 999px;
         padding: 0.45rem 1rem;
         font-weight: 600;
+    }
+    div[data-testid="stToggle"] input:checked + div {
+        background-color: #22c55e !important;
+    }
+    div[data-testid="stToggle"] input:checked + div > div {
+        background-color: #ffffff !important;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.5rem;
@@ -118,7 +124,7 @@ st.markdown(
 
 
 SECTIONS = [
-    "Dashboard",
+    "Programación",
     "Perfil",
     "Días y comidas",
     "Generador",
@@ -128,13 +134,13 @@ SECTIONS = [
     "Consumo real",
 ]
 if "section" not in st.session_state:
-    st.session_state.section = "Dashboard"
+    st.session_state.section = "Programación"
 
 st.markdown(
     """
     <div>
-        <h1 class="page-title">Dashboard</h1>
-        <p class="page-subtitle">Planificación diaria, control de macros y hábitos sostenibles.</p>
+        <h1 class="page-title">Programación</h1>
+        <p class="page-subtitle">Vista de los próximos 7 días con la dieta propuesta.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -142,85 +148,102 @@ st.markdown(
 
 
 def get(endpoint: str, params: dict | None = None):
-    return requests.get(f"{API_URL}{endpoint}", params=params, timeout=10).json()
+    params_tuple = tuple(sorted((params or {}).items()))
+    return cached_get(endpoint, params_tuple)
 
 
 def post(endpoint: str, payload: dict):
-    return requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10).json()
+    response = requests.post(f"{API_URL}{endpoint}", json=payload, timeout=10)
+    st.cache_data.clear()
+    return parse_response(response)
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def cached_get(endpoint: str, params_tuple: tuple[tuple[str, str], ...]):
+    params = dict(params_tuple)
+    response = requests.get(f"{API_URL}{endpoint}", params=params or None, timeout=10)
+    return parse_response(response)
+
+
+def parse_response(response: requests.Response) -> dict | list:
+    if not response.content:
+        return {}
+    content_type = response.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        return {}
+    if not response.text.strip():
+        return {}
+    try:
+        return response.json()
+    except (JSONDecodeError, ValueError):
+        return {}
 
 
 def format_fecha(fecha: date) -> str:
     return fecha.strftime("%d/%m/%Y")
 
 
-if st.session_state.section == "Dashboard":
-    st.markdown("### Calendario mensual")
+if st.session_state.section == "Programación":
+    st.markdown("### Próximos 7 días")
     today = date.today()
-    month_matrix = calendar.monthcalendar(today.year, today.month)
     dias = get("/dias")
     dias_por_fecha = {dia["fecha"]: dia for dia in dias}
-    week_headers = ["L", "M", "X", "J", "V", "S", "D"]
-    header_cols = st.columns(7)
-    for idx, header in enumerate(week_headers):
-        header_cols[idx].markdown(f"**{header}**")
-    for week in month_matrix:
-        day_cols = st.columns(7)
-        for idx, day_num in enumerate(week):
-            if day_num == 0:
-                day_cols[idx].markdown(" ")
-                continue
-            fecha = format_fecha(date(today.year, today.month, day_num))
-            dia = dias_por_fecha.get(fecha)
-            tipo_actual = dia["tipo"] if dia else "Descanso"
-            is_entreno = tipo_actual == "Entreno"
-            with day_cols[idx]:
-                st.markdown(f"**{day_num}**")
-                toggle_key = f"entreno-{fecha}"
-                toggle_label = "🏋️" if is_entreno else "💤"
-                entreno = st.toggle(
-                    toggle_label,
-                    value=is_entreno,
-                    key=toggle_key,
-                )
-                if entreno != is_entreno:
-                    if dia:
-                        post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
-                        requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
-                    else:
-                        post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
-                    st.rerun()
-                if dia:
-                    comidas = get(f"/dias/{dia['id']}/comidas")
-                    almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
-                    cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
-                    if almuerzo:
-                        items = get(f"/comidas/{almuerzo['id']}/items")
-                        kcal = sum(item["kcal"] for item in items)
-                        st.caption(f"Almuerzo: {len(items)} items · {int(kcal)} kcal")
-                    if cena:
-                        items = get(f"/comidas/{cena['id']}/items")
-                        kcal = sum(item["kcal"] for item in items)
-                        st.caption(f"Cena: {len(items)} items · {int(kcal)} kcal")
+    for offset in range(7):
+        fecha = format_fecha(today + timedelta(days=offset))
+        dia = dias_por_fecha.get(fecha)
+        st.markdown(f"#### {fecha}")
+        if not dia:
+            st.info("Sin propuesta generada todavía.")
+            continue
+        comidas = get(f"/dias/{dia['id']}/comidas")
+        items_totales: list[dict] = []
+        for comida in comidas:
+            items_totales.extend(get(f"/comidas/{comida['id']}/items"))
+        if not items_totales:
+            st.info("Sin items generados aún para este día.")
+            continue
+        kcal_total = sum(item["kcal"] for item in items_totales)
+        proteina_total = sum(item["proteina"] for item in items_totales)
+        hidratos_total = sum(item["hidratos"] for item in items_totales)
+        grasas_total = sum(item["grasas"] for item in items_totales)
+        kpi_cols = st.columns(4)
+        kpi_cols[0].metric("Kcal", f"{int(kcal_total)}")
+        kpi_cols[1].metric("Proteínas (g)", f"{int(proteina_total)}")
+        kpi_cols[2].metric("Hidratos (g)", f"{int(hidratos_total)}")
+        kpi_cols[3].metric("Grasas (g)", f"{int(grasas_total)}")
+        st.bar_chart(
+            {
+                "Kcal": kcal_total,
+                "Proteínas (g)": proteina_total,
+                "Hidratos (g)": hidratos_total,
+                "Grasas (g)": grasas_total,
+            }
+        )
 
 
 elif st.session_state.section == "Perfil":
     st.subheader("Perfil de usuario")
     perfil = get("/perfil")
-    default_tipo = perfil.get("default_tipo", "Descanso")
     objetivos = {item["tipo"]: item for item in perfil.get("objetivos", [])}
     with st.form("perfil-form"):
-        st.markdown("### Tipo de día por defecto")
-        tipo_default = st.selectbox("Nuevo día:", ["Entreno", "Descanso"], index=0 if default_tipo == "Entreno" else 1)
         st.markdown("### Objetivos por tipo de día")
         tabs = st.tabs(["Entreno", "Descanso"])
         objetivos_payload = []
         for tab, tipo in zip(tabs, ["Entreno", "Descanso"], strict=False):
             with tab:
                 valores = objetivos.get(tipo, {})
-                kcal = st.number_input(f"Kcal ({tipo})", value=float(valores.get("kcal", 0)), step=10.0)
-                proteina = st.number_input(f"Proteínas g ({tipo})", value=float(valores.get("proteina", 0)), step=1.0)
-                hidratos = st.number_input(f"Hidratos g ({tipo})", value=float(valores.get("hidratos", 0)), step=1.0)
-                grasas = st.number_input(f"Grasas g ({tipo})", value=float(valores.get("grasas", 0)), step=1.0)
+                kcal_base = float(valores.get("kcal", 0))
+                kcal = st.number_input(f"Kcal ({tipo})", value=kcal_base, step=10.0)
+                if tipo == "Entreno":
+                    pct_proteina, pct_hidratos, pct_grasas = 0.25, 0.50, 0.25
+                else:
+                    pct_proteina, pct_hidratos, pct_grasas = 0.32, 0.33, 0.35
+                proteina = (kcal * pct_proteina) / 4 if kcal else 0
+                hidratos = (kcal * pct_hidratos) / 4 if kcal else 0
+                grasas = (kcal * pct_grasas) / 9 if kcal else 0
+                st.caption(
+                    f"Proteínas: {proteina:.1f} g · Hidratos: {hidratos:.1f} g · Grasas: {grasas:.1f} g"
+                )
                 objetivos_payload.append(
                     {
                         "tipo": tipo,
@@ -234,10 +257,17 @@ elif st.session_state.section == "Perfil":
     if submitted:
         requests.put(
             f"{API_URL}/perfil",
-            json={"default_tipo": tipo_default, "objetivos": objetivos_payload},
+            json={"objetivos": objetivos_payload},
             timeout=10,
         )
         st.success("Perfil actualizado.")
+    with st.form("nuevo-reparto-form"):
+        st.markdown("### Nuevo tipo de día (próximamente)")
+        st.text_input("Nombre del tipo de día", placeholder="Ej: Competición")
+        st.number_input("Proteínas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
+        st.number_input("Hidratos (%)", min_value=0.0, max_value=100.0, value=50.0, step=1.0)
+        st.number_input("Grasas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
+        st.form_submit_button("Guardar (pendiente)")
 
 
 elif st.session_state.section == "Días y comidas":

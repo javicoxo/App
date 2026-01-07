@@ -71,7 +71,7 @@ class ConsumoUpdate(BaseModel):
 
 
 class PantryUpdate(BaseModel):
-    ean: str
+    ean: str | None = None
     nombre: str
     estado: str = Field(pattern="^(disponible|agotado)$")
 
@@ -82,7 +82,7 @@ class ShoppingUpdate(BaseModel):
 
 
 class ObjetivoDia(BaseModel):
-    tipo: str = Field(pattern="^(Entreno|Descanso)$")
+    tipo: str
     kcal: float
     proteina: float
     hidratos: float
@@ -90,5 +90,5 @@ class ObjetivoDia(BaseModel):
 
 
 class PerfilUpdate(BaseModel):
-    default_tipo: str = Field(pattern="^(Entreno|Descanso)$")
+    default_tipo: str | None = None
     objetivos: list[ObjetivoDia]

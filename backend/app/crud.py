@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime
 from typing import Iterable
 
@@ -39,11 +40,18 @@ def list_alimentos() -> list[dict]:
 
 def add_dia(fecha: str, tipo: str) -> str:
     with get_connection() as connection:
-        connection.execute(
-            "INSERT OR REPLACE INTO dias (id, fecha, tipo) VALUES (?, ?, ?)",
-            (fecha, fecha, tipo),
-        )
-    return fecha
+        try:
+            connection.execute(
+                "INSERT OR REPLACE INTO dias (id, fecha, tipo) VALUES (?, ?, ?)",
+                (fecha, fecha, tipo),
+            )
+            return fecha
+        except sqlite3.IntegrityError:
+            cursor = connection.execute(
+                "INSERT INTO dias (fecha, tipo) VALUES (?, ?)",
+                (fecha, tipo),
+            )
+            return str(cursor.lastrowid)
 
 
 def list_dias() -> list[dict]:
@@ -57,12 +65,25 @@ def list_dias() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_dia(dia_id: str) -> dict | None:
+    with get_connection() as connection:
+        row = connection.execute("SELECT * FROM dias WHERE id = ?", (dia_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def update_dia_tipo(dia_id: str, tipo: str) -> None:
     with get_connection() as connection:
         connection.execute(
             "UPDATE dias SET tipo = ? WHERE id = ?",
             (tipo, dia_id),
         )
+
+
+def delete_dia(dia_id: str) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM comida_items WHERE comida_id IN (SELECT id FROM comidas WHERE dia_id = ?)", (dia_id,))
+        connection.execute("DELETE FROM comidas WHERE dia_id = ?", (dia_id,))
+        connection.execute("DELETE FROM dias WHERE id = ?", (dia_id,))
 
 
 def add_comida(dia_id: str, nombre: str, postre_obligatorio: bool) -> int:
@@ -247,6 +268,20 @@ def update_lista_compra(item_id: int, comprado: bool) -> None:
         )
 
 
+def get_lista_compra_item(item_id: int) -> dict | None:
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM lista_compra WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_lista_compra_item(item_id: int) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM lista_compra WHERE id = ?", (item_id,))
+
+
 def record_consumo(item_id: int, estado: str, gramos: float) -> None:
     with get_connection() as connection:
         connection.execute(
@@ -342,6 +377,11 @@ def upsert_objetivo(tipo: str, kcal: float, proteina: float, hidratos: float, gr
             """,
             (tipo, kcal, proteina, hidratos, grasas),
         )
+
+
+def delete_objetivo(tipo: str) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM objetivos_dia WHERE tipo = ?", (tipo,))
 
 
 def get_objetivo(tipo: str) -> dict:

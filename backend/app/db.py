@@ -12,22 +12,15 @@ def init_db() -> None:
         cursor = connection.cursor()
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS alimentos (
-                ean TEXT PRIMARY KEY,
-                nombre TEXT NOT NULL,
-                marca TEXT,
-                kcal_100g REAL NOT NULL,
-                proteina_100g REAL NOT NULL,
-                hidratos_100g REAL NOT NULL,
-                grasas_100g REAL NOT NULL,
-                rol_principal TEXT NOT NULL,
-                grupo_mediterraneo TEXT NOT NULL,
-                frecuencia_mediterranea TEXT NOT NULL,
-                permitido_comidas TEXT NOT NULL,
-                categorias TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS fuentes_alimentos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL UNIQUE,
+                tipo TEXT NOT NULL,
+                creado_en TEXT NOT NULL
             )
             """
         )
+        _ensure_alimentos_schema(connection)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS dias (
@@ -127,6 +120,101 @@ def init_db() -> None:
             """
         )
         connection.commit()
+
+
+def _ensure_alimentos_schema(connection: sqlite3.Connection) -> None:
+    cursor = connection.cursor()
+    columnas = cursor.execute("PRAGMA table_info(alimentos)").fetchall()
+    if not columnas:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS alimentos (
+                ean TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL,
+                marca TEXT,
+                kcal_100g REAL NOT NULL,
+                proteina_100g REAL NOT NULL,
+                hidratos_100g REAL NOT NULL,
+                grasas_100g REAL NOT NULL,
+                rol_principal TEXT NOT NULL,
+                grupo_funcional TEXT NOT NULL,
+                subgrupo_funcional TEXT NOT NULL,
+                fuente_id INTEGER,
+                FOREIGN KEY(fuente_id) REFERENCES fuentes_alimentos(id)
+            )
+            """
+        )
+        return
+    columnas_actuales = {columna[1] for columna in columnas}
+    columnas_objetivo = {
+        "ean",
+        "nombre",
+        "marca",
+        "kcal_100g",
+        "proteina_100g",
+        "hidratos_100g",
+        "grasas_100g",
+        "rol_principal",
+        "grupo_funcional",
+        "subgrupo_funcional",
+        "fuente_id",
+    }
+    if columnas_actuales == columnas_objetivo:
+        return
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS alimentos_nuevo (
+            ean TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            marca TEXT,
+            kcal_100g REAL NOT NULL,
+            proteina_100g REAL NOT NULL,
+            hidratos_100g REAL NOT NULL,
+            grasas_100g REAL NOT NULL,
+            rol_principal TEXT NOT NULL,
+            grupo_funcional TEXT NOT NULL,
+            subgrupo_funcional TEXT NOT NULL,
+            fuente_id INTEGER,
+            FOREIGN KEY(fuente_id) REFERENCES fuentes_alimentos(id)
+        )
+        """
+    )
+    if columnas_actuales:
+        grupo_col = "grupo_funcional" if "grupo_funcional" in columnas_actuales else "grupo_mediterraneo"
+        subgrupo_col = "subgrupo_funcional" if "subgrupo_funcional" in columnas_actuales else "categorias"
+        fuente_col = "fuente_id" if "fuente_id" in columnas_actuales else "NULL"
+        cursor.execute(
+            f"""
+            INSERT INTO alimentos_nuevo (
+                ean,
+                nombre,
+                marca,
+                kcal_100g,
+                proteina_100g,
+                hidratos_100g,
+                grasas_100g,
+                rol_principal,
+                grupo_funcional,
+                subgrupo_funcional,
+                fuente_id
+            )
+            SELECT
+                ean,
+                nombre,
+                marca,
+                kcal_100g,
+                proteina_100g,
+                hidratos_100g,
+                grasas_100g,
+                rol_principal,
+                COALESCE({grupo_col}, ''),
+                COALESCE({subgrupo_col}, ''),
+                {fuente_col}
+            FROM alimentos
+            """
+        )
+    cursor.execute("DROP TABLE alimentos")
+    cursor.execute("ALTER TABLE alimentos_nuevo RENAME TO alimentos")
 
 
 @contextmanager

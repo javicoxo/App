@@ -58,43 +58,38 @@ def _despensa_disponible() -> set[str]:
 
 
 def _permitido_para_comida(alimento: dict, comida: str) -> bool:
-    permitido = str(alimento.get("permitido_comidas", ""))
-    if not permitido:
-        return True
-    permitidos = {item.strip().lower() for item in permitido.replace(";", ",").split(",")}
-    if comida.lower() in permitidos:
-        return True
-    if comida == "Media mañana":
-        return "desayuno" in permitidos or "merienda" in permitidos
-    return False
+    return True
+
+
+def _texto_grupo(alimento: dict) -> str:
+    grupo = str(alimento.get("grupo_funcional", "")).lower()
+    subgrupo = str(alimento.get("subgrupo_funcional", "")).lower()
+    return f"{grupo} {subgrupo}".strip()
 
 
 def _es_cereal_o_pan(alimento: dict) -> bool:
-    categorias = alimento.get("categorias", "").lower()
-    grupo = alimento.get("grupo_mediterraneo", "").lower()
-    return "cereal" in categorias or "pan" in categorias or "cereal" in grupo or "pan" in grupo
+    texto = _texto_grupo(alimento)
+    return "cereal" in texto or "pan" in texto
 
 
 def _es_lacteo(alimento: dict) -> bool:
-    grupo = alimento.get("grupo_mediterraneo", "").lower()
-    categorias = alimento.get("categorias", "").lower()
-    return "lácte" in grupo or "lacte" in grupo or "lácte" in categorias or "lacte" in categorias
+    texto = _texto_grupo(alimento)
+    return "lácte" in texto or "lacte" in texto
 
 
 def _es_fruta(alimento: dict) -> bool:
-    grupo = alimento.get("grupo_mediterraneo", "").lower()
-    categorias = alimento.get("categorias", "").lower()
-    return "fruta" in grupo or "fruta" in categorias
+    texto = _texto_grupo(alimento)
+    return "fruta" in texto
 
 
 def _es_huevo(alimento: dict) -> bool:
-    categorias = alimento.get("categorias", "").lower()
+    categorias = _texto_grupo(alimento)
     nombre = alimento.get("nombre", "").lower()
     return "huevo" in categorias or "huevo" in nombre
 
 
 def _es_embutido(alimento: dict) -> bool:
-    categorias = alimento.get("categorias", "").lower()
+    categorias = _texto_grupo(alimento)
     return "embutido" in categorias
 
 
@@ -185,7 +180,7 @@ def _seleccionar_postre(comida: str) -> dict | None:
     candidatos = [
         alimento
         for alimento in list_alimentos()
-        if alimento["grupo_mediterraneo"].lower() in POSTRE_VALIDO
+        if any(permitido in _texto_grupo(alimento) for permitido in POSTRE_VALIDO)
         and _permitido_para_comida(alimento, comida)
     ]
     return random.choice(candidatos) if candidatos else None

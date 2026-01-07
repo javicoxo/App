@@ -91,6 +91,27 @@ st.markdown(
         font-size: 1.2rem;
         margin-top: 0.2rem;
     }
+    .dashboard-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        min-height: 160px;
+    }
+    .dashboard-card__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .dashboard-card__value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+    .dashboard-card__subtitle {
+        color: var(--muted);
+        margin: 0;
+    }
     .stButton > button {
         background: var(--accent-2);
         border: none;
@@ -126,6 +147,7 @@ st.markdown(
 
 
 SECTIONS = [
+    "Dashboard",
     "Programación",
     "Alimentos",
     "Perfil",
@@ -133,14 +155,27 @@ SECTIONS = [
     "Despensa y compra",
     "Consumo real",
 ]
+SECTION_INTROS = {
+    "Dashboard": ("Dashboard", "Resumen visual de las principales secciones."),
+    "Programación": ("Programación", "Vista de los próximos 7 días con la dieta propuesta."),
+    "Alimentos": ("Alimentos", "Gestión y carga de alimentos y recetas."),
+    "Perfil": ("Perfil", "Configuración de objetivos nutricionales."),
+    "Generador": ("Generador", "Crear planes de menús y regenerarlos."),
+    "Despensa y compra": ("Despensa y compra", "Estado de la despensa y lista automática."),
+    "Consumo real": ("Consumo real", "Registrar el consumo diario."),
+}
 if "section" not in st.session_state:
-    st.session_state.section = "Programación"
+    st.session_state.section = "Dashboard"
 
+current_title, current_subtitle = SECTION_INTROS.get(
+    st.session_state.section,
+    ("BeFitLab", "Resumen general de la plataforma."),
+)
 st.markdown(
-    """
+    f"""
     <div>
-        <h1 class="page-title">Programación</h1>
-        <p class="page-subtitle">Vista de los próximos 7 días con la dieta propuesta.</p>
+        <h1 class="page-title">{current_title}</h1>
+        <p class="page-subtitle">{current_subtitle}</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -183,7 +218,80 @@ def format_fecha(fecha: date) -> str:
     return fecha.strftime("%d/%m/%Y")
 
 
-if st.session_state.section == "Programación":
+def go_to_section(name: str) -> None:
+    st.session_state.section = name
+
+
+def ensure_fuente(nombre: str, tipo: str) -> str | None:
+    fuente = post("/fuentes-alimentos", {"nombre": nombre, "tipo": tipo})
+    return fuente.get("id") if isinstance(fuente, dict) else None
+
+
+def render_dashboard_card(title: str, value: str, subtitle: str, badge: str = "") -> None:
+    badge_html = f'<span class="chip">{badge}</span>' if badge else ""
+    st.markdown(
+        f"""
+        <div class="card dashboard-card">
+            <div class="dashboard-card__header">
+                <h3>{title}</h3>
+                {badge_html}
+            </div>
+            <div class="dashboard-card__value">{value}</div>
+            <p class="dashboard-card__subtitle">{subtitle}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+if st.session_state.section == "Dashboard":
+    dias = get("/dias")
+    perfil = get("/perfil")
+    objetivos_lista = perfil.get("objetivos", [])
+    despensa_disponible = get("/despensa", {"estado": "disponible"})
+    despensa_agotado = get("/despensa", {"estado": "agotado"})
+    lista_compra = get("/lista-compra/auto", {"rango_dias": 7})
+    total_dias = len(dias) if isinstance(dias, list) else 0
+    tipos_dia = len(objetivos_lista)
+    disponibles = len(despensa_disponible) if isinstance(despensa_disponible, list) else 0
+    agotados = len(despensa_agotado) if isinstance(despensa_agotado, list) else 0
+    faltantes = len(lista_compra) if isinstance(lista_compra, list) else 0
+
+    st.markdown("### Resumen rápido")
+    kpi_cols = st.columns(4)
+    with kpi_cols[0]:
+        render_dashboard_card("Días planificados", f"{total_dias}", "Calendario activo", "Programación")
+    with kpi_cols[1]:
+        render_dashboard_card("Tipos de día", f"{tipos_dia}", "Objetivos configurados", "Perfil")
+    with kpi_cols[2]:
+        render_dashboard_card("Despensa", f"{disponibles}", f"{agotados} agotados", "Stock")
+    with kpi_cols[3]:
+        render_dashboard_card("Lista de compra", f"{faltantes}", "Faltantes próximos 7 días", "Compra")
+
+    st.markdown("### Accesos directos")
+    access_cols = st.columns(3)
+    access_cards = [
+        ("Programación", "Planea y revisa el menú semanal.", "Ir a programación"),
+        ("Generador", "Crea un día nuevo y genera menús.", "Ir al generador"),
+        ("Alimentos", "Carga alimentos, recetas y OFF.", "Ir a alimentos"),
+        ("Despensa y compra", "Controla tu stock y compras.", "Ir a despensa"),
+        ("Consumo real", "Registra lo que has consumido.", "Ir a consumo"),
+        ("Perfil", "Ajusta objetivos y macronutrientes.", "Ir a perfil"),
+    ]
+    for idx, (section, description, button_label) in enumerate(access_cards):
+        col = access_cols[idx % 3]
+        with col:
+            render_dashboard_card(section, "Resumen", description)
+            st.button(
+                button_label,
+                key=f"dashboard-{section}",
+                use_container_width=True,
+                on_click=go_to_section,
+                args=(section,),
+            )
+
+
+elif st.session_state.section == "Programación":
     st.markdown("### Próximos 7 días")
     today = date.today()
     consulta_fecha = st.date_input(
@@ -411,22 +519,22 @@ elif st.session_state.section == "Perfil":
 
 elif st.session_state.section == "Alimentos":
     st.subheader("Gestión de alimentos")
-    tabs = st.tabs(["Importar CSV", "Recetas", "Open Food Facts"])
+    tabs = st.tabs(["Importar CSV", "Recetas", "Open Food Facts", "Bases importadas"])
     with tabs[0]:
         st.markdown("### Importar base de datos (CSV)")
         delimitador = st.text_input("Delimitador", value=",", max_chars=1)
         archivo = st.file_uploader("CSV de alimentos", type=["csv"])
         columnas_requeridas = [
+            "ean",
             "nombre",
+            "marca",
             "kcal_100g",
             "proteina_100g",
             "hidratos_100g",
             "grasas_100g",
             "rol_principal",
-            "grupo_mediterraneo",
-            "frecuencia_mediterranea",
-            "permitido_comidas",
-            "categorias",
+            "grupo_funcional",
+            "subgrupo_funcional",
         ]
         if archivo is not None:
             contenido = archivo.getvalue().decode("utf-8-sig")
@@ -447,6 +555,8 @@ elif st.session_state.section == "Alimentos":
                         estado = st.empty()
                         batch_size = 25
                         exitos = 0
+                        nombre_fuente = f"CSV: {archivo.name}"
+                        fuente_id = ensure_fuente(nombre_fuente, "csv")
                         with requests.Session() as session:
                             for fila in filas:
                                 try:
@@ -459,10 +569,9 @@ elif st.session_state.section == "Alimentos":
                                         "hidratos_100g": float(fila["hidratos_100g"]),
                                         "grasas_100g": float(fila["grasas_100g"]),
                                         "rol_principal": fila["rol_principal"],
-                                        "grupo_mediterraneo": fila["grupo_mediterraneo"],
-                                        "frecuencia_mediterranea": fila["frecuencia_mediterranea"],
-                                        "permitido_comidas": fila["permitido_comidas"],
-                                        "categorias": fila["categorias"],
+                                        "grupo_funcional": fila["grupo_funcional"],
+                                        "subgrupo_funcional": fila["subgrupo_funcional"],
+                                        "fuente_id": fuente_id,
                                     }
                                     session.post(f"{API_URL}/alimentos", json=payload, timeout=30)
                                     exitos += 1
@@ -485,15 +594,14 @@ elif st.session_state.section == "Alimentos":
             hidratos_100g = st.number_input("Hidratos / 100g", min_value=0.0, step=0.1)
             grasas_100g = st.number_input("Grasas / 100g", min_value=0.0, step=0.1)
             rol_principal = st.text_input("Rol nutricional")
-            grupo_mediterraneo = st.text_input("Grupo mediterráneo")
-            frecuencia_mediterranea = st.text_input("Frecuencia mediterránea")
-            permitido_comidas = st.text_input("Comidas permitidas (separadas por coma)")
-            categorias = st.text_input("Categorías")
+            grupo_funcional = st.text_input("Grupo funcional")
+            subgrupo_funcional = st.text_input("Subgrupo funcional")
             submit = st.form_submit_button("Guardar receta")
         if submit:
             if not nombre.strip():
                 st.warning("El nombre es obligatorio.")
             else:
+                fuente_id = ensure_fuente("Manual", "manual")
                 post(
                     "/alimentos",
                     {
@@ -505,10 +613,9 @@ elif st.session_state.section == "Alimentos":
                         "hidratos_100g": hidratos_100g,
                         "grasas_100g": grasas_100g,
                         "rol_principal": rol_principal,
-                        "grupo_mediterraneo": grupo_mediterraneo,
-                        "frecuencia_mediterranea": frecuencia_mediterranea,
-                        "permitido_comidas": permitido_comidas,
-                        "categorias": categorias,
+                        "grupo_funcional": grupo_funcional,
+                        "subgrupo_funcional": subgrupo_funcional,
+                        "fuente_id": fuente_id,
                     },
                 )
                 st.success("Receta guardada.")
@@ -576,15 +683,14 @@ elif st.session_state.section == "Alimentos":
                     "Grasas / 100g", min_value=0.0, value=float(nutriments.get("fat_100g") or 0), step=0.1
                 )
                 rol_principal = st.text_input("Rol nutricional")
-                grupo_mediterraneo = st.text_input("Grupo mediterráneo")
-                frecuencia_mediterranea = st.text_input("Frecuencia mediterránea")
-                permitido_comidas = st.text_input("Comidas permitidas (separadas por coma)")
-                categorias = st.text_input("Categorías")
+                grupo_funcional = st.text_input("Grupo funcional")
+                subgrupo_funcional = st.text_input("Subgrupo funcional")
                 submit = st.form_submit_button("Importar alimento")
             if submit:
                 if not nombre.strip():
                     st.warning("El nombre es obligatorio.")
                 else:
+                    fuente_id = ensure_fuente("Open Food Facts", "open-food-facts")
                     post(
                         "/alimentos",
                         {
@@ -596,14 +702,28 @@ elif st.session_state.section == "Alimentos":
                             "hidratos_100g": hidratos_100g,
                             "grasas_100g": grasas_100g,
                             "rol_principal": rol_principal,
-                            "grupo_mediterraneo": grupo_mediterraneo,
-                            "frecuencia_mediterranea": frecuencia_mediterranea,
-                            "permitido_comidas": permitido_comidas,
-                            "categorias": categorias,
+                            "grupo_funcional": grupo_funcional,
+                            "subgrupo_funcional": subgrupo_funcional,
+                            "fuente_id": fuente_id,
                         },
                     )
                     st.success("Alimento importado.")
                     st.cache_data.clear()
+    with tabs[3]:
+        st.markdown("### Bases de datos importadas")
+        fuentes = get("/fuentes-alimentos")
+        if not fuentes:
+            st.info("No hay bases de datos importadas todavía.")
+        else:
+            for fuente in fuentes:
+                cols = st.columns([3, 2, 2, 1])
+                cols[0].markdown(f"**{fuente.get('nombre', '')}**")
+                cols[1].markdown(f"Tipo: {fuente.get('tipo', '')}")
+                cols[2].markdown(f"Alimentos: {fuente.get('total_alimentos', 0)}")
+                if cols[3].button("Eliminar", key=f"delete-fuente-{fuente.get('id')}"):
+                    requests.delete(f"{API_URL}/fuentes-alimentos/{fuente.get('id')}", timeout=10)
+                    st.cache_data.clear()
+                    st.rerun()
 
 
 elif st.session_state.section == "Generador":

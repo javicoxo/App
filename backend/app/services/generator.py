@@ -97,21 +97,6 @@ def _es_embutido(alimento: dict) -> bool:
     categorias = alimento.get("categorias", "").lower()
     return "embutido" in categorias
 
-def _candidatos_desayuno_snack(comida: str) -> list[dict]:
-    candidatos = []
-    for alimento in list_alimentos():
-        if not _permitido_para_comida(alimento, comida):
-            continue
-        if (
-            _es_lacteo(alimento)
-            or _es_fruta(alimento)
-            or _es_cereal_o_pan(alimento)
-            or _es_huevo(alimento)
-            or _es_embutido(alimento)
-            or "proteina" in str(alimento.get("rol_principal", "")).lower()
-        ):
-            candidatos.append(alimento)
-    return candidatos
 
 def _candidatos_desayuno_snack(comida: str) -> list[dict]:
     candidatos = []
@@ -129,6 +114,21 @@ def _candidatos_desayuno_snack(comida: str) -> list[dict]:
             candidatos.append(alimento)
     return candidatos
 
+def _candidatos_desayuno_snack(comida: str) -> list[dict]:
+    candidatos = []
+    for alimento in list_alimentos():
+        if not _permitido_para_comida(alimento, comida):
+            continue
+        if (
+            _es_lacteo(alimento)
+            or _es_fruta(alimento)
+            or _es_cereal_o_pan(alimento)
+            or _es_huevo(alimento)
+            or _es_embutido(alimento)
+            or "proteina" in str(alimento.get("rol_principal", "")).lower()
+        ):
+            candidatos.append(alimento)
+    return candidatos
 
 def _seleccionar_alimento(
     rol: str,
@@ -215,6 +215,20 @@ def _objetivos_por_comida(objetivo: dict) -> dict[str, dict]:
             "grasas": grasas_total * peso,
         }
     return objetivos_comidas
+
+
+def _dentro_margen_macros(objetivo: dict, totals: dict) -> bool:
+    def dentro(valor: float, objetivo_val: float) -> bool:
+        if objetivo_val == 0:
+            return True
+        return abs(valor - objetivo_val) <= (objetivo_val * 0.05)
+
+    return (
+        abs(totals["kcal"] - objetivo["kcal"]) <= 100
+        and dentro(totals["proteina"], objetivo["proteina"])
+        and dentro(totals["hidratos"], objetivo["hidratos"])
+        and dentro(totals["grasas"], objetivo["grasas"])
+    )
 
 
 def _generar_items_comida(comida: str, objetivo: dict) -> list[dict]:
@@ -352,18 +366,18 @@ def _generar_items_comida(comida: str, objetivo: dict) -> list[dict]:
     return items
 
 
-def _ajustar_tolerancia(items: list[dict], objetivo_kcal: float) -> list[dict]:
+def _ajustar_tolerancia(items: list[dict], objetivo: dict) -> list[dict]:
     kcal_total = sum(item["kcal"] for item in items)
     if not kcal_total:
         return items
-    diferencia = objetivo_kcal - kcal_total
-    if abs(diferencia) <= 50:
+    diferencia = objetivo["kcal"] - kcal_total
+    if abs(diferencia) <= 100:
         return items
     kcal_proteina = sum(item["kcal"] for item in items if item["rol_principal"] == "proteina")
     kcal_resto = kcal_total - kcal_proteina
     if kcal_resto <= 0:
         return items
-    ratio = max((objetivo_kcal - kcal_proteina) / kcal_resto, 0)
+    ratio = max((objetivo["kcal"] - kcal_proteina) / kcal_resto, 0)
     ajustados = []
     for item in items:
         if item["rol_principal"] == "proteina":
@@ -393,14 +407,42 @@ def generar_menu_dia(comidas: list[dict], tipo: str) -> dict[str, list[dict]]:
         if nombre not in objetivos_comidas:
             continue
         menu[nombre] = _generar_items_comida(nombre, objetivos_comidas[nombre])
-    items_totales = [item for items in menu.values() for item in items]
-    items_ajustados = _ajustar_tolerancia(items_totales, objetivo["kcal"])
-    if items_ajustados:
+    def ajustar_menu(menu_actual: dict[str, list[dict]]) -> dict[str, list[dict]]:
+        items_totales = [item for items in menu_actual.values() for item in items]
+        items_ajustados = _ajustar_tolerancia(items_totales, objetivo)
+        if not items_ajustados:
+            return menu_actual
         index = 0
-        for nombre in menu:
-            cantidad = len(menu[nombre])
-            menu[nombre] = items_ajustados[index : index + cantidad]
+        menu_final = {}
+        for nombre in menu_actual:
+            cantidad = len(menu_actual[nombre])
+            menu_final[nombre] = items_ajustados[index : index + cantidad]
             index += cantidad
+        totals = {
+            "kcal": sum(item["kcal"] for item in items_ajustados),
+            "proteina": sum(item["proteina"] for item in items_ajustados),
+            "hidratos": sum(item["hidratos"] for item in items_ajustados),
+            "grasas": sum(item["grasas"] for item in items_ajustados),
+        }
+        if _dentro_margen_macros(objetivo, totals):
+            return menu_final
+        return menu_final
+
+    menu = ajustar_menu(menu)
+    totals = {
+        "kcal": sum(item["kcal"] for items in menu.values() for item in items),
+        "proteina": sum(item["proteina"] for items in menu.values() for item in items),
+        "hidratos": sum(item["hidratos"] for items in menu.values() for item in items),
+        "grasas": sum(item["grasas"] for items in menu.values() for item in items),
+    }
+    if not _dentro_margen_macros(objetivo, totals):
+        menu = {}
+        for comida in comidas:
+            nombre = comida["nombre"]
+            if nombre not in objetivos_comidas:
+                continue
+            menu[nombre] = _generar_items_comida(nombre, objetivos_comidas[nombre])
+        menu = ajustar_menu(menu)
     return menu
 
 
@@ -416,10 +458,12 @@ def generar_comida(comida: str, macros_objetivo: dict) -> list[dict]:
 def registrar_faltantes(items: list[dict]) -> None:
     disponibles = _despensa_disponible()
     for item in items:
-        if item.get("ean") and item["ean"] not in disponibles:
-            add_lista_compra(item["ean"], item["nombre"])
-        elif not item.get("ean"):
-            add_lista_compra(None, item["nombre"])
+        nombre = item.get("nombre") or ""
+        ean = item.get("ean")
+        if ean and ean not in disponibles:
+            add_lista_compra(ean, nombre)
+        elif not ean and nombre:
+            add_lista_compra(None, nombre)
 
 
 def sustituir_item(item: dict) -> dict | None:

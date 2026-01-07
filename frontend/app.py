@@ -1,5 +1,4 @@
-import calendar
-from datetime import date
+from datetime import date, timedelta
 from json import JSONDecodeError
 
 import requests
@@ -98,26 +97,6 @@ st.markdown(
         padding: 0.45rem 1rem;
         font-weight: 600;
     }
-    .calendar-day {
-        font-weight: 600;
-    }
-    div[data-testid="stVerticalBlock"]:has(.calendar-scope) div[data-testid="column"] {
-        padding: 0 !important;
-    }
-    div[data-testid="stVerticalBlock"]:has(.calendar-scope) div[data-testid="stHorizontalBlock"] {
-        gap: 0 !important;
-    }
-    div[data-testid="stVerticalBlock"]:has(.calendar-scope) div[data-testid="column"] > div {
-        background: var(--panel);
-        border: 1px solid #e2e8f0;
-        border-radius: 0;
-        padding: 0.55rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-        min-height: 0;
-        height: var(--calendar-cell-height);
-    }
     div[data-testid="stToggle"] input:checked + div {
         background-color: #22c55e !important;
     }
@@ -145,7 +124,7 @@ st.markdown(
 
 
 SECTIONS = [
-    "Dashboard",
+    "Programación",
     "Perfil",
     "Días y comidas",
     "Generador",
@@ -155,13 +134,13 @@ SECTIONS = [
     "Consumo real",
 ]
 if "section" not in st.session_state:
-    st.session_state.section = "Dashboard"
+    st.session_state.section = "Programación"
 
 st.markdown(
     """
     <div>
-        <h1 class="page-title">Dashboard</h1>
-        <p class="page-subtitle">Planificación diaria, control de macros y hábitos sostenibles.</p>
+        <h1 class="page-title">Programación</h1>
+        <p class="page-subtitle">Vista de los próximos 7 días con la dieta propuesta.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -204,64 +183,42 @@ def format_fecha(fecha: date) -> str:
     return fecha.strftime("%d/%m/%Y")
 
 
-if st.session_state.section == "Dashboard":
-    st.markdown("### Calendario mensual")
+if st.session_state.section == "Programación":
+    st.markdown("### Próximos 7 días")
     today = date.today()
-    month_matrix = calendar.monthcalendar(today.year, today.month)
     dias = get("/dias")
     dias_por_fecha = {dia["fecha"]: dia for dia in dias}
-    total_rows = len(month_matrix)
-    calendar_container = st.container()
-    with calendar_container:
-        st.markdown(
-            f"<style>:root {{ --calendar-cell-height: calc((100vh - 260px) / {total_rows}); }}</style>",
-            unsafe_allow_html=True,
+    for offset in range(7):
+        fecha = format_fecha(today + timedelta(days=offset))
+        dia = dias_por_fecha.get(fecha)
+        st.markdown(f"#### {fecha}")
+        if not dia:
+            st.info("Sin propuesta generada todavía.")
+            continue
+        comidas = get(f"/dias/{dia['id']}/comidas")
+        items_totales: list[dict] = []
+        for comida in comidas:
+            items_totales.extend(get(f"/comidas/{comida['id']}/items"))
+        if not items_totales:
+            st.info("Sin items generados aún para este día.")
+            continue
+        kcal_total = sum(item["kcal"] for item in items_totales)
+        proteina_total = sum(item["proteina"] for item in items_totales)
+        hidratos_total = sum(item["hidratos"] for item in items_totales)
+        grasas_total = sum(item["grasas"] for item in items_totales)
+        kpi_cols = st.columns(4)
+        kpi_cols[0].metric("Kcal", f"{int(kcal_total)}")
+        kpi_cols[1].metric("Proteínas (g)", f"{int(proteina_total)}")
+        kpi_cols[2].metric("Hidratos (g)", f"{int(hidratos_total)}")
+        kpi_cols[3].metric("Grasas (g)", f"{int(grasas_total)}")
+        st.bar_chart(
+            {
+                "Kcal": kcal_total,
+                "Proteínas (g)": proteina_total,
+                "Hidratos (g)": hidratos_total,
+                "Grasas (g)": grasas_total,
+            }
         )
-        st.markdown('<div class="calendar-scope"></div>', unsafe_allow_html=True)
-        for week in month_matrix:
-            day_cols = st.columns(7)
-            for idx, day_num in enumerate(week):
-                with day_cols[idx]:
-                    if day_num == 0:
-                        st.markdown("&nbsp;", unsafe_allow_html=True)
-                        continue
-                    fecha = format_fecha(date(today.year, today.month, day_num))
-                    dia = dias_por_fecha.get(fecha)
-                    tipo_actual = dia["tipo"] if dia else "Entreno"
-                    is_entreno = tipo_actual == "Entreno"
-                    st.markdown(f'<div class="calendar-day">{day_num}</div>', unsafe_allow_html=True)
-                    toggle_key = f"entreno-{fecha}"
-                    toggle_label = "🏋️" if is_entreno else "💤"
-                    entreno = st.toggle(
-                        toggle_label,
-                        value=is_entreno,
-                        key=toggle_key,
-                    )
-                    if entreno != is_entreno:
-                        if dia:
-                            post_payload = {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"}
-                            response = requests.put(f"{API_URL}/dias/{dia['id']}", json=post_payload, timeout=10)
-                            st.cache_data.clear()
-                            _ = parse_response(response)
-                        else:
-                            post("/dias", {"fecha": fecha, "tipo": "Entreno" if entreno else "Descanso"})
-                        st.rerun()
-                    almuerzo_text = "Almuerzo: pendiente"
-                    cena_text = "Cena: pendiente"
-                    if dia:
-                        comidas = get(f"/dias/{dia['id']}/comidas")
-                        almuerzo = next((c for c in comidas if c["nombre"] == "Almuerzo"), None)
-                        cena = next((c for c in comidas if c["nombre"] == "Cena"), None)
-                        if almuerzo:
-                            items = get(f"/comidas/{almuerzo['id']}/items")
-                            kcal = sum(item["kcal"] for item in items)
-                            almuerzo_text = f"Almuerzo: {len(items)} items · {int(kcal)} kcal"
-                        if cena:
-                            items = get(f"/comidas/{cena['id']}/items")
-                            kcal = sum(item["kcal"] for item in items)
-                            cena_text = f"Cena: {len(items)} items · {int(kcal)} kcal"
-                    st.caption(almuerzo_text)
-                    st.caption(cena_text)
 
 
 elif st.session_state.section == "Perfil":

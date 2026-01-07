@@ -240,7 +240,19 @@ if st.session_state.section == "Programación":
         )
         for menu in menu_por_comida:
             st.markdown(f"**{menu['nombre']}**")
-            st.dataframe(menu["items"])
+            st.dataframe(
+                [
+                    {
+                        "nombre": item.get("nombre"),
+                        "gramos": item.get("gramos"),
+                        "kcal": item.get("kcal"),
+                        "proteina": item.get("proteina"),
+                        "hidratos": item.get("hidratos"),
+                        "grasas": item.get("grasas"),
+                    }
+                    for item in menu["items"]
+                ]
+            )
         if st.button("Eliminar día", key=f"delete-dia-{fecha}"):
             requests.delete(f"{API_URL}/dias/{dia['id']}", timeout=10)
             st.cache_data.clear()
@@ -289,7 +301,19 @@ if st.session_state.section == "Programación":
             )
             for menu in menu_por_comida:
                 st.markdown(f"**{menu['nombre']}**")
-                st.dataframe(menu["items"])
+                st.dataframe(
+                    [
+                        {
+                            "nombre": item.get("nombre"),
+                            "gramos": item.get("gramos"),
+                            "kcal": item.get("kcal"),
+                            "proteina": item.get("proteina"),
+                            "hidratos": item.get("hidratos"),
+                            "grasas": item.get("grasas"),
+                        }
+                        for item in menu["items"]
+                    ]
+                )
 
 
 elif st.session_state.section == "Perfil":
@@ -612,7 +636,19 @@ elif st.session_state.section == "Generador":
         for comida in comidas:
             st.markdown(f"### {comida['nombre']}")
             items = get(f"/comidas/{comida['id']}/items")
-            st.dataframe(items)
+            st.dataframe(
+                [
+                    {
+                        "nombre": item.get("nombre"),
+                        "gramos": item.get("gramos"),
+                        "kcal": item.get("kcal"),
+                        "proteina": item.get("proteina"),
+                        "hidratos": item.get("hidratos"),
+                        "grasas": item.get("grasas"),
+                    }
+                    for item in items
+                ]
+            )
     else:
         st.info("Crea un día antes de generar.")
 

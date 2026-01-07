@@ -9,6 +9,7 @@ from .schemas import (
     DiaCreate,
     GeneracionRequest,
     GolosinaRequest,
+    ObjetivoDia,
     PerfilUpdate,
     PantryUpdate,
     ShoppingUpdate,
@@ -177,7 +178,8 @@ def obtener_perfil():
 
 @app.put("/perfil")
 def actualizar_perfil(payload: PerfilUpdate):
-    crud.set_default_tipo(payload.default_tipo)
+    if payload.default_tipo:
+        crud.set_default_tipo(payload.default_tipo)
     for objetivo in payload.objetivos:
         crud.upsert_objetivo(
             objetivo.tipo,
@@ -186,4 +188,16 @@ def actualizar_perfil(payload: PerfilUpdate):
             objetivo.hidratos,
             objetivo.grasas,
         )
+    return {"status": "ok"}
+
+
+@app.post("/perfil/objetivos")
+def crear_objetivo(payload: ObjetivoDia):
+    crud.upsert_objetivo(
+        payload.tipo,
+        payload.kcal,
+        payload.proteina,
+        payload.hidratos,
+        payload.grasas,
+    )
     return {"status": "ok"}

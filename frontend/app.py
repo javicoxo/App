@@ -265,12 +265,33 @@ elif st.session_state.section == "Perfil":
         )
         st.success("Perfil actualizado.")
     with st.form("nuevo-reparto-form"):
-        st.markdown("### Nuevo tipo de día (próximamente)")
-        st.text_input("Nombre del tipo de día", placeholder="Ej: Competición")
-        st.number_input("Proteínas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
-        st.number_input("Hidratos (%)", min_value=0.0, max_value=100.0, value=50.0, step=1.0)
-        st.number_input("Grasas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
-        st.form_submit_button("Guardar (pendiente)")
+        st.markdown("### Nuevo tipo de día")
+        nuevo_tipo = st.text_input("Nombre del tipo de día", placeholder="Ej: Competición")
+        kcal_nuevo = st.number_input("Kcal objetivo", min_value=0.0, value=2000.0, step=10.0)
+        pct_proteina = st.number_input("Proteínas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
+        pct_hidratos = st.number_input("Hidratos (%)", min_value=0.0, max_value=100.0, value=50.0, step=1.0)
+        pct_grasas = st.number_input("Grasas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
+        crear_reparto = st.form_submit_button("Guardar")
+    if crear_reparto:
+        if not nuevo_tipo.strip():
+            st.warning("Introduce un nombre para el nuevo tipo de día.")
+            st.stop()
+        proteina = (kcal_nuevo * (pct_proteina / 100)) / 4 if kcal_nuevo else 0
+        hidratos = (kcal_nuevo * (pct_hidratos / 100)) / 4 if kcal_nuevo else 0
+        grasas = (kcal_nuevo * (pct_grasas / 100)) / 9 if kcal_nuevo else 0
+        requests.post(
+            f"{API_URL}/perfil/objetivos",
+            json={
+                "tipo": nuevo_tipo,
+                "kcal": kcal_nuevo,
+                "proteina": proteina,
+                "hidratos": hidratos,
+                "grasas": grasas,
+            },
+            timeout=10,
+        )
+        st.cache_data.clear()
+        st.success("Tipo de día guardado.")
 
 
 elif st.session_state.section == "Generador":

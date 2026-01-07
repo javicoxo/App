@@ -184,6 +184,12 @@ def format_fecha(fecha: date) -> str:
 if st.session_state.section == "Programación":
     st.markdown("### Próximos 7 días")
     today = date.today()
+    consulta_fecha = st.date_input(
+        "Consultar día",
+        value=today,
+        min_value=date(today.year, 1, 1),
+        max_value=date(today.year, 12, 31),
+    )
     dias = get("/dias")
     dias_por_fecha = {dia["fecha"]: dia for dia in dias}
     for offset in range(7):
@@ -221,6 +227,37 @@ if st.session_state.section == "Programación":
             requests.delete(f"{API_URL}/dias/{dia['id']}", timeout=10)
             st.cache_data.clear()
             st.rerun()
+    st.markdown("### Consultar cualquier día")
+    fecha_consulta = format_fecha(consulta_fecha)
+    dia = dias_por_fecha.get(fecha_consulta)
+    st.markdown(f"#### {fecha_consulta}")
+    if not dia:
+        st.info("Sin propuesta generada para este día.")
+    else:
+        comidas = get(f"/dias/{dia['id']}/comidas")
+        items_totales: list[dict] = []
+        for comida in comidas:
+            items_totales.extend(get(f"/comidas/{comida['id']}/items"))
+        if not items_totales:
+            st.info("Sin items generados aún para este día.")
+        else:
+            kcal_total = sum(item["kcal"] for item in items_totales)
+            proteina_total = sum(item["proteina"] for item in items_totales)
+            hidratos_total = sum(item["hidratos"] for item in items_totales)
+            grasas_total = sum(item["grasas"] for item in items_totales)
+            kpi_cols = st.columns(4)
+            kpi_cols[0].metric("Kcal", f"{int(kcal_total)}")
+            kpi_cols[1].metric("Proteínas (g)", f"{int(proteina_total)}")
+            kpi_cols[2].metric("Hidratos (g)", f"{int(hidratos_total)}")
+            kpi_cols[3].metric("Grasas (g)", f"{int(grasas_total)}")
+            st.bar_chart(
+                {
+                    "Kcal": kcal_total,
+                    "Proteínas (g)": proteina_total,
+                    "Hidratos (g)": hidratos_total,
+                    "Grasas (g)": grasas_total,
+                }
+            )
 
 
 elif st.session_state.section == "Perfil":
@@ -324,6 +361,8 @@ elif st.session_state.section == "Generador":
         if st.button("Generar menú completo"):
             post("/generador", {"dia_id": dia_id})
             st.success("Menú generado.")
+            st.cache_data.clear()
+            st.rerun()
         comidas = get(f"/dias/{dia_id}/comidas")
         for comida in comidas:
             st.markdown(f"### {comida['nombre']}")

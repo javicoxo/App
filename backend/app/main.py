@@ -16,7 +16,7 @@ from .schemas import (
     SustitucionRequest,
 )
 from .services.generator import (
-    generar_comida,
+    generar_menu_dia,
     recalcular_por_golosina,
     registrar_faltantes,
     sustituir_item as sustituir_item_generador,
@@ -97,10 +97,14 @@ def generar_menu(request: GeneracionRequest):
     comidas = crud.list_comidas(request.dia_id)
     if not comidas:
         raise HTTPException(status_code=404, detail="Día no encontrado")
+    dia = crud.get_dia(request.dia_id)
+    if not dia:
+        raise HTTPException(status_code=404, detail="Día no encontrado")
     generadas = []
+    menu = generar_menu_dia(comidas, dia["tipo"])
     for comida in comidas:
         crud.clear_comida_items(comida["id"])
-        items = generar_comida(comida["nombre"], {"kcal": 0, "proteina": 0, "hidratos": 0, "grasas": 0})
+        items = menu.get(comida["nombre"], [])
         for item in items:
             item["comida_id"] = comida["id"]
             item["gramos_iniciales"] = item["gramos"]

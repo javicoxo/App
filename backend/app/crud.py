@@ -65,6 +65,12 @@ def list_dias() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_dia(dia_id: str) -> dict | None:
+    with get_connection() as connection:
+        row = connection.execute("SELECT * FROM dias WHERE id = ?", (dia_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def update_dia_tipo(dia_id: str, tipo: str) -> None:
     with get_connection() as connection:
         connection.execute(

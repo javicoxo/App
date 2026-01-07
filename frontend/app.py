@@ -127,8 +127,7 @@ SECTIONS = [
     "Programación",
     "Perfil",
     "Generador",
-    "Despensa",
-    "Lista de la compra",
+    "Despensa y compra",
     "Estadísticas",
     "Consumo real",
 ]
@@ -185,6 +184,12 @@ def format_fecha(fecha: date) -> str:
 if st.session_state.section == "Programación":
     st.markdown("### Próximos 7 días")
     today = date.today()
+    consulta_fecha = st.date_input(
+        "Consultar día",
+        value=today,
+        min_value=date(today.year, 1, 1),
+        max_value=date(today.year, 12, 31),
+    )
     dias = get("/dias")
     dias_por_fecha = {dia["fecha"]: dia for dia in dias}
     for offset in range(7):
@@ -222,28 +227,81 @@ if st.session_state.section == "Programación":
             requests.delete(f"{API_URL}/dias/{dia['id']}", timeout=10)
             st.cache_data.clear()
             st.rerun()
+    st.markdown("### Consultar cualquier día")
+    fecha_consulta = format_fecha(consulta_fecha)
+    dia = dias_por_fecha.get(fecha_consulta)
+    st.markdown(f"#### {fecha_consulta}")
+    if not dia:
+        st.info("Sin propuesta generada para este día.")
+    else:
+        comidas = get(f"/dias/{dia['id']}/comidas")
+        items_totales: list[dict] = []
+        for comida in comidas:
+            items_totales.extend(get(f"/comidas/{comida['id']}/items"))
+        if not items_totales:
+            st.info("Sin items generados aún para este día.")
+        else:
+            kcal_total = sum(item["kcal"] for item in items_totales)
+            proteina_total = sum(item["proteina"] for item in items_totales)
+            hidratos_total = sum(item["hidratos"] for item in items_totales)
+            grasas_total = sum(item["grasas"] for item in items_totales)
+            kpi_cols = st.columns(4)
+            kpi_cols[0].metric("Kcal", f"{int(kcal_total)}")
+            kpi_cols[1].metric("Proteínas (g)", f"{int(proteina_total)}")
+            kpi_cols[2].metric("Hidratos (g)", f"{int(hidratos_total)}")
+            kpi_cols[3].metric("Grasas (g)", f"{int(grasas_total)}")
+            st.bar_chart(
+                {
+                    "Kcal": kcal_total,
+                    "Proteínas (g)": proteina_total,
+                    "Hidratos (g)": hidratos_total,
+                    "Grasas (g)": grasas_total,
+                }
+            )
 
 
 elif st.session_state.section == "Perfil":
     st.subheader("Perfil de usuario")
     perfil = get("/perfil")
-    objetivos = {item["tipo"]: item for item in perfil.get("objetivos", [])}
+    objetivos_lista = perfil.get("objetivos", [])
+    objetivos = {item["tipo"]: item for item in objetivos_lista}
+    tipos = sorted(objetivos.keys())
+    st.markdown("### Tipos de día disponibles")
+    for tipo in tipos:
+        row_cols = st.columns([3, 1])
+        row_cols[0].markdown(f"**{tipo}**")
+        if tipo not in {"Entreno", "Descanso"}:
+            if row_cols[1].button("Eliminar", key=f"delete-tipo-{tipo}"):
+                requests.delete(f"{API_URL}/perfil/objetivos/{tipo}", timeout=10)
+                st.cache_data.clear()
+                st.rerun()
     with st.form("perfil-form"):
         st.markdown("### Objetivos por tipo de día")
-        tabs = st.tabs(["Entreno", "Descanso"])
+        tabs = st.tabs(tipos or ["Entreno", "Descanso"])
         objetivos_payload = []
-        for tab, tipo in zip(tabs, ["Entreno", "Descanso"], strict=False):
+        for tab, tipo in zip(tabs, tipos or ["Entreno", "Descanso"], strict=False):
             with tab:
                 valores = objetivos.get(tipo, {})
                 kcal_base = float(valores.get("kcal", 0))
                 kcal = st.number_input(f"Kcal ({tipo})", value=kcal_base, step=10.0)
                 if tipo == "Entreno":
                     pct_proteina, pct_hidratos, pct_grasas = 0.30, 0.50, 0.20
-                else:
+                elif tipo == "Descanso":
                     pct_proteina, pct_hidratos, pct_grasas = 0.35, 0.25, 0.40
-                proteina = (kcal * pct_proteina) / 4 if kcal else 0
-                hidratos = (kcal * pct_hidratos) / 4 if kcal else 0
-                grasas = (kcal * pct_grasas) / 9 if kcal else 0
+                else:
+                    base_proteina = float(valores.get("proteina", 0))
+                    base_hidratos = float(valores.get("hidratos", 0))
+                    base_grasas = float(valores.get("grasas", 0))
+                    base_total = base_proteina * 4 + base_hidratos * 4 + base_grasas * 9
+                    scale = kcal / base_total if base_total else 0
+                    proteina = base_proteina * scale
+                    hidratos = base_hidratos * scale
+                    grasas = base_grasas * scale
+                    pct_proteina = pct_hidratos = pct_grasas = None
+                if pct_proteina is not None:
+                    proteina = (kcal * pct_proteina) / 4 if kcal else 0
+                    hidratos = (kcal * pct_hidratos) / 4 if kcal else 0
+                    grasas = (kcal * pct_grasas) / 9 if kcal else 0
                 st.caption(
                     f"Proteínas: {proteina:.1f} g · Hidratos: {hidratos:.1f} g · Grasas: {grasas:.1f} g"
                 )
@@ -292,6 +350,7 @@ elif st.session_state.section == "Perfil":
         )
         st.cache_data.clear()
         st.success("Tipo de día guardado.")
+        st.rerun()
 
 
 elif st.session_state.section == "Generador":
@@ -302,6 +361,8 @@ elif st.session_state.section == "Generador":
         if st.button("Generar menú completo"):
             post("/generador", {"dia_id": dia_id})
             st.success("Menú generado.")
+            st.cache_data.clear()
+            st.rerun()
         comidas = get(f"/dias/{dia_id}/comidas")
         for comida in comidas:
             st.markdown(f"### {comida['nombre']}")
@@ -311,16 +372,54 @@ elif st.session_state.section == "Generador":
         st.info("Crea un día antes de generar.")
 
 
-elif st.session_state.section == "Despensa":
-    st.subheader("Despensa disponible")
-    st.dataframe(get("/despensa", {"estado": "disponible"}))
-    st.subheader("Despensa agotada")
-    st.dataframe(get("/despensa", {"estado": "agotado"}))
-
-
-elif st.session_state.section == "Lista de la compra":
-    st.subheader("Lista automática")
-    st.dataframe(get("/lista-compra"))
+elif st.session_state.section == "Despensa y compra":
+    st.subheader("Despensa y lista de la compra")
+    tabs = st.tabs(["Despensa", "Lista de la compra"])
+    with tabs[0]:
+        st.markdown("### Añadir alimento manual")
+        with st.form("despensa-manual"):
+            ean_manual = st.text_input("EAN (opcional)")
+            nombre_manual = st.text_input("Nombre del alimento")
+            estado_manual = st.selectbox("Estado", ["disponible", "agotado"])
+            submit_despensa = st.form_submit_button("Guardar")
+        if submit_despensa:
+            if not nombre_manual.strip():
+                st.warning("El nombre es obligatorio.")
+            else:
+                requests.post(
+                    f"{API_URL}/despensa",
+                    json={"ean": ean_manual or None, "nombre": nombre_manual, "estado": estado_manual},
+                    timeout=10,
+                )
+                st.cache_data.clear()
+                st.success("Despensa actualizada.")
+                st.rerun()
+        st.markdown("### Disponibles")
+        st.dataframe(get("/despensa", {"estado": "disponible"}))
+        st.markdown("### Agotados")
+        st.dataframe(get("/despensa", {"estado": "agotado"}))
+    with tabs[1]:
+        st.markdown("### Lista automática")
+        rango = st.selectbox("Cobertura", ["7 días", "Hoy"])
+        rango_dias = 7 if rango == "7 días" else 1
+        lista = get("/lista-compra/auto", {"rango_dias": rango_dias})
+        if not lista:
+            st.info("No hay faltantes detectados.")
+        else:
+            for item in lista:
+                cols = st.columns([4, 2, 2])
+                nombre = item.get("nombre", "")
+                gramos = item.get("gramos", 0)
+                cols[0].markdown(f"**{nombre}**")
+                cols[1].markdown(f"{gramos:.0f} g")
+                if cols[2].button("Marcar comprado", key=f"comprar-{item.get('ean')}-{nombre}"):
+                    requests.post(
+                        f"{API_URL}/despensa",
+                        json={"ean": item.get("ean"), "nombre": nombre, "estado": "disponible"},
+                        timeout=10,
+                    )
+                    st.cache_data.clear()
+                    st.rerun()
 
 
 elif st.session_state.section == "Estadísticas":

@@ -42,7 +42,14 @@ def objetivos_por_tipo(tipo: str) -> dict:
 
 
 def _alimentos_por_rol(rol: str) -> list[dict]:
-    return [alimento for alimento in list_alimentos() if rol in alimento["rol_principal"]]
+    alimentos = list_alimentos()
+    rol_lower = rol.lower()
+    candidatos = []
+    for alimento in alimentos:
+        rol_principal = str(alimento.get("rol_principal", "")).lower()
+        if rol_lower in rol_principal:
+            candidatos.append(alimento)
+    return candidatos or alimentos
 
 
 def _despensa_disponible() -> set[str]:
@@ -51,7 +58,11 @@ def _despensa_disponible() -> set[str]:
 
 
 def _permitido_para_comida(alimento: dict, comida: str) -> bool:
-    return comida in alimento["permitido_comidas"]
+    permitido = str(alimento.get("permitido_comidas", ""))
+    if not permitido:
+        return False
+    permitidos = {item.strip().lower() for item in permitido.replace(";", ",").split(",")}
+    return comida.lower() in permitidos
 
 
 def _es_cereal_o_pan(alimento: dict) -> bool:
@@ -60,7 +71,13 @@ def _es_cereal_o_pan(alimento: dict) -> bool:
     return "cereal" in categorias or "pan" in categorias or "cereal" in grupo or "pan" in grupo
 
 
-def _seleccionar_alimento(rol: str, comida: str, requiere_cereal: bool = False, evita_cereal: bool = False) -> dict | None:
+def _seleccionar_alimento(
+    rol: str,
+    comida: str,
+    requiere_cereal: bool = False,
+    evita_cereal: bool = False,
+    macro_requerido: str | None = None,
+) -> dict | None:
     candidatos = []
     for alimento in _alimentos_por_rol(rol):
         if not _permitido_para_comida(alimento, comida):
@@ -69,8 +86,16 @@ def _seleccionar_alimento(rol: str, comida: str, requiere_cereal: bool = False, 
             continue
         if evita_cereal and _es_cereal_o_pan(alimento):
             continue
+        if macro_requerido and alimento.get(f"{macro_requerido}_100g", 0) <= 0:
+            continue
         candidatos.append(alimento)
-    return random.choice(candidatos) if candidatos else None
+    if not candidatos:
+        return None
+    disponibles = _despensa_disponible()
+    en_despensa = [item for item in candidatos if item.get("ean") in disponibles]
+    if en_despensa:
+        return random.choice(en_despensa)
+    return random.choice(candidatos)
 
 
 def _calcular_gramos(alimento: dict, gramos: float) -> dict:
@@ -137,18 +162,19 @@ def _generar_items_comida(comida: str, objetivo: dict) -> list[dict]:
     items = []
     requiere_cereal = comida == "Desayuno"
     evita_cereal = comida in {"Almuerzo", "Cena"}
-    proteina = _seleccionar_alimento("proteina", comida)
+    proteina = _seleccionar_alimento("proteina", comida, macro_requerido="proteina")
     if proteina:
         gramos = _gramos_para_macro(proteina, "proteina", objetivo["proteina"])
-        macros = _calcular_gramos(proteina, gramos)
-        items.append(
-            {
-                "ean": proteina["ean"],
-                "nombre": proteina["nombre"],
-                "rol_principal": "proteina",
-                **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
-            }
-        )
+        if gramos > 0:
+            macros = _calcular_gramos(proteina, gramos)
+            items.append(
+                {
+                    "ean": proteina["ean"],
+                    "nombre": proteina["nombre"],
+                    "rol_principal": "proteina",
+                    **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
+                }
+            )
     postre_macros = {"proteina": 0, "hidratos": 0, "grasas": 0}
     if comida in {"Almuerzo", "Cena"}:
         postre = _seleccionar_postre(comida)
@@ -161,6 +187,40 @@ def _generar_items_comida(comida: str, objetivo: dict) -> list[dict]:
                     "ean": postre["ean"],
                     "nombre": postre["nombre"],
                     "rol_principal": postre["rol_principal"],
+                    **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
+                }
+            )
+    hidratos_obj = max(objetivo["hidratos"] - postre_macros["hidratos"], 0)
+    grasas_obj = max(objetivo["grasas"] - postre_macros["grasas"], 0)
+    hidrato = _seleccionar_alimento(
+        "hidrato",
+        comida,
+        requiere_cereal=requiere_cereal,
+        evita_cereal=evita_cereal,
+        macro_requerido="hidratos",
+    )
+    if hidrato:
+        gramos = _gramos_para_macro(hidrato, "hidratos", hidratos_obj)
+        if gramos > 0:
+            macros = _calcular_gramos(hidrato, gramos)
+            items.append(
+                {
+                    "ean": hidrato["ean"],
+                    "nombre": hidrato["nombre"],
+                    "rol_principal": "hidrato",
+                    **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
+                }
+            )
+    grasa = _seleccionar_alimento("grasa", comida, evita_cereal=evita_cereal, macro_requerido="grasas")
+    if grasa:
+        gramos = _gramos_para_macro(grasa, "grasas", grasas_obj)
+        if gramos > 0:
+            macros = _calcular_gramos(grasa, gramos)
+            items.append(
+                {
+                    "ean": grasa["ean"],
+                    "nombre": grasa["nombre"],
+                    "rol_principal": "grasa",
                     **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
                 }
             )

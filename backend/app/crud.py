@@ -268,6 +268,20 @@ def update_lista_compra(item_id: int, comprado: bool) -> None:
         )
 
 
+def get_lista_compra_item(item_id: int) -> dict | None:
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM lista_compra WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_lista_compra_item(item_id: int) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM lista_compra WHERE id = ?", (item_id,))
+
+
 def record_consumo(item_id: int, estado: str, gramos: float) -> None:
     with get_connection() as connection:
         connection.execute(
@@ -363,6 +377,11 @@ def upsert_objetivo(tipo: str, kcal: float, proteina: float, hidratos: float, gr
             """,
             (tipo, kcal, proteina, hidratos, grasas),
         )
+
+
+def delete_objetivo(tipo: str) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM objetivos_dia WHERE tipo = ?", (tipo,))
 
 
 def get_objetivo(tipo: str) -> dict:

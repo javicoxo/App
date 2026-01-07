@@ -126,7 +126,6 @@ st.markdown(
 SECTIONS = [
     "Programación",
     "Perfil",
-    "Días y comidas",
     "Generador",
     "Despensa",
     "Lista de la compra",
@@ -219,6 +218,10 @@ if st.session_state.section == "Programación":
                 "Grasas (g)": grasas_total,
             }
         )
+        if st.button("Eliminar día", key=f"delete-dia-{fecha}"):
+            requests.delete(f"{API_URL}/dias/{dia['id']}", timeout=10)
+            st.cache_data.clear()
+            st.rerun()
 
 
 elif st.session_state.section == "Perfil":
@@ -235,9 +238,9 @@ elif st.session_state.section == "Perfil":
                 kcal_base = float(valores.get("kcal", 0))
                 kcal = st.number_input(f"Kcal ({tipo})", value=kcal_base, step=10.0)
                 if tipo == "Entreno":
-                    pct_proteina, pct_hidratos, pct_grasas = 0.25, 0.50, 0.25
+                    pct_proteina, pct_hidratos, pct_grasas = 0.30, 0.50, 0.20
                 else:
-                    pct_proteina, pct_hidratos, pct_grasas = 0.32, 0.33, 0.35
+                    pct_proteina, pct_hidratos, pct_grasas = 0.35, 0.25, 0.40
                 proteina = (kcal * pct_proteina) / 4 if kcal else 0
                 hidratos = (kcal * pct_hidratos) / 4 if kcal else 0
                 grasas = (kcal * pct_grasas) / 9 if kcal else 0
@@ -268,25 +271,6 @@ elif st.session_state.section == "Perfil":
         st.number_input("Hidratos (%)", min_value=0.0, max_value=100.0, value=50.0, step=1.0)
         st.number_input("Grasas (%)", min_value=0.0, max_value=100.0, value=25.0, step=1.0)
         st.form_submit_button("Guardar (pendiente)")
-
-
-elif st.session_state.section == "Días y comidas":
-    st.subheader("Crear día")
-    perfil = get("/perfil")
-    default_tipo = perfil.get("default_tipo", "Descanso")
-    with st.form("crear-dia"):
-        fecha = st.text_input("Fecha (DD/MM/AAAA)")
-        tipo = st.selectbox(
-            "Tipo de día",
-            ["Entreno", "Descanso"],
-            index=0 if default_tipo == "Entreno" else 1,
-        )
-        submitted = st.form_submit_button("Crear día")
-    if submitted:
-        post("/dias", {"fecha": fecha, "tipo": tipo})
-        st.success("Día creado con sus comidas.")
-    st.subheader("Días existentes")
-    st.dataframe(get("/dias"))
 
 
 elif st.session_state.section == "Generador":

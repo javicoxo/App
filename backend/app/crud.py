@@ -73,6 +73,13 @@ def update_dia_tipo(dia_id: str, tipo: str) -> None:
         )
 
 
+def delete_dia(dia_id: str) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM comida_items WHERE comida_id IN (SELECT id FROM comidas WHERE dia_id = ?)", (dia_id,))
+        connection.execute("DELETE FROM comidas WHERE dia_id = ?", (dia_id,))
+        connection.execute("DELETE FROM dias WHERE id = ?", (dia_id,))
+
+
 def add_comida(dia_id: str, nombre: str, postre_obligatorio: bool) -> int:
     with get_connection() as connection:
         cursor = connection.execute(

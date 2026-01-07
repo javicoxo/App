@@ -389,26 +389,37 @@ elif st.session_state.section == "Alimentos":
                     st.dataframe(filas[:5])
                     if st.button("Importar alimentos"):
                         errores = 0
-                        for fila in filas:
-                            try:
-                                payload = {
-                                    "ean": fila.get("ean") or None,
-                                    "nombre": fila["nombre"],
-                                    "marca": fila.get("marca") or None,
-                                    "kcal_100g": float(fila["kcal_100g"]),
-                                    "proteina_100g": float(fila["proteina_100g"]),
-                                    "hidratos_100g": float(fila["hidratos_100g"]),
-                                    "grasas_100g": float(fila["grasas_100g"]),
-                                    "rol_principal": fila["rol_principal"],
-                                    "grupo_mediterraneo": fila["grupo_mediterraneo"],
-                                    "frecuencia_mediterranea": fila["frecuencia_mediterranea"],
-                                    "permitido_comidas": fila["permitido_comidas"],
-                                    "categorias": fila["categorias"],
-                                }
-                                post("/alimentos", payload)
-                            except (ValueError, KeyError):
-                                errores += 1
-                        st.success(f"Importación finalizada. Errores: {errores}.")
+                        total = len(filas)
+                        progreso = st.progress(0)
+                        estado = st.empty()
+                        batch_size = 25
+                        exitos = 0
+                        with requests.Session() as session:
+                            for fila in filas:
+                                try:
+                                    payload = {
+                                        "ean": fila.get("ean") or None,
+                                        "nombre": fila["nombre"],
+                                        "marca": fila.get("marca") or None,
+                                        "kcal_100g": float(fila["kcal_100g"]),
+                                        "proteina_100g": float(fila["proteina_100g"]),
+                                        "hidratos_100g": float(fila["hidratos_100g"]),
+                                        "grasas_100g": float(fila["grasas_100g"]),
+                                        "rol_principal": fila["rol_principal"],
+                                        "grupo_mediterraneo": fila["grupo_mediterraneo"],
+                                        "frecuencia_mediterranea": fila["frecuencia_mediterranea"],
+                                        "permitido_comidas": fila["permitido_comidas"],
+                                        "categorias": fila["categorias"],
+                                    }
+                                    session.post(f"{API_URL}/alimentos", json=payload, timeout=30)
+                                    exitos += 1
+                                except (ValueError, KeyError, requests.RequestException):
+                                    errores += 1
+                                progreso.progress(min((exitos + errores) / total, 1.0))
+                                if (exitos + errores) % batch_size == 0:
+                                    estado.write(f"Procesadas: {exitos + errores}/{total}")
+                        estado.write(f"Procesadas: {exitos + errores}/{total}")
+                        st.success(f"Importación finalizada. Éxitos: {exitos}. Errores: {errores}.")
                         st.cache_data.clear()
     with tabs[1]:
         st.markdown("### Recetas propias")
@@ -544,12 +555,27 @@ elif st.session_state.section == "Alimentos":
 
 elif st.session_state.section == "Generador":
     st.subheader("Generar menú")
+    with st.form("crear-dia-generador"):
+        fecha = st.date_input("Fecha")
+        tipo = st.selectbox("Tipo de día", ["Entreno", "Descanso"])
+        submit = st.form_submit_button("Crear y generar menú")
+    if submit:
+        payload = {"fecha": format_fecha(fecha), "tipo": tipo}
+        dia = post("/dias", payload)
+        dia_id = dia.get("id")
+        if dia_id:
+            post("/generador", {"dia_id": dia_id})
+            st.success("Menú generado.")
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.error("No se pudo crear el día.")
     dias = get("/dias")
     if dias:
         dia_id = st.selectbox("Selecciona día", [dia["id"] for dia in dias])
-        if st.button("Generar menú completo"):
+        if st.button("Regenerar menú completo"):
             post("/generador", {"dia_id": dia_id})
-            st.success("Menú generado.")
+            st.success("Menú regenerado.")
             st.cache_data.clear()
             st.rerun()
         comidas = get(f"/dias/{dia_id}/comidas")

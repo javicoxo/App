@@ -114,6 +114,21 @@ def _candidatos_desayuno_snack(comida: str) -> list[dict]:
             candidatos.append(alimento)
     return candidatos
 
+def _candidatos_desayuno_snack(comida: str) -> list[dict]:
+    candidatos = []
+    for alimento in list_alimentos():
+        if not _permitido_para_comida(alimento, comida):
+            continue
+        if (
+            _es_lacteo(alimento)
+            or _es_fruta(alimento)
+            or _es_cereal_o_pan(alimento)
+            or _es_huevo(alimento)
+            or _es_embutido(alimento)
+            or "proteina" in str(alimento.get("rol_principal", "")).lower()
+        ):
+            candidatos.append(alimento)
+    return candidatos
 
 def _seleccionar_alimento(
     rol: str,

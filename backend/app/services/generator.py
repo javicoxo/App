@@ -60,7 +60,7 @@ def _despensa_disponible() -> set[str]:
 def _permitido_para_comida(alimento: dict, comida: str) -> bool:
     permitido = str(alimento.get("permitido_comidas", ""))
     if not permitido:
-        return False
+        return True
     permitidos = {item.strip().lower() for item in permitido.replace(";", ",").split(",")}
     return comida.lower() in permitidos
 

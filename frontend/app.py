@@ -567,12 +567,13 @@ elif st.session_state.section == "Generador":
             post("/generador", {"dia_id": dia_id})
             st.success("Menú generado.")
             st.cache_data.clear()
+            st.session_state.last_generated_day = dia_id
             st.rerun()
         else:
             st.error("No se pudo crear el día.")
     dias = get("/dias")
     if dias:
-        dia_id = st.selectbox("Selecciona día", [dia["id"] for dia in dias])
+        dia_id = st.session_state.get("last_generated_day", dias[-1]["id"])
         if st.button("Regenerar menú completo"):
             post("/generador", {"dia_id": dia_id})
             st.success("Menú regenerado.")

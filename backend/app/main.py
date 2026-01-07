@@ -9,13 +9,14 @@ from .schemas import (
     DiaCreate,
     GeneracionRequest,
     GolosinaRequest,
+    ObjetivoDia,
     PerfilUpdate,
     PantryUpdate,
     ShoppingUpdate,
     SustitucionRequest,
 )
 from .services.generator import (
-    generar_comida,
+    generar_menu_dia,
     recalcular_por_golosina,
     registrar_faltantes,
     sustituir_item as sustituir_item_generador,
@@ -60,6 +61,15 @@ def actualizar_dia(dia_id: str, dia: DiaCreate):
     return {"status": "ok"}
 
 
+@app.delete("/dias/{dia_id}")
+def eliminar_dia(dia_id: str):
+    dias = [item for item in crud.list_dias() if item["id"] == dia_id]
+    if not dias:
+        raise HTTPException(status_code=404, detail="Día no encontrado")
+    crud.delete_dia(dia_id)
+    return {"status": "ok"}
+
+
 @app.post("/comidas")
 def crear_comida(comida: ComidaCreate):
     comida_id = crud.add_comida(comida.dia_id, comida.nombre, comida.postre_obligatorio)
@@ -87,10 +97,14 @@ def generar_menu(request: GeneracionRequest):
     comidas = crud.list_comidas(request.dia_id)
     if not comidas:
         raise HTTPException(status_code=404, detail="Día no encontrado")
+    dia = crud.get_dia(request.dia_id)
+    if not dia:
+        raise HTTPException(status_code=404, detail="Día no encontrado")
     generadas = []
+    menu = generar_menu_dia(comidas, dia["tipo"])
     for comida in comidas:
         crud.clear_comida_items(comida["id"])
-        items = generar_comida(comida["nombre"], {"kcal": 0, "proteina": 0, "hidratos": 0, "grasas": 0})
+        items = menu.get(comida["nombre"], [])
         for item in items:
             item["comida_id"] = comida["id"]
             item["gramos_iniciales"] = item["gramos"]
@@ -168,7 +182,8 @@ def obtener_perfil():
 
 @app.put("/perfil")
 def actualizar_perfil(payload: PerfilUpdate):
-    crud.set_default_tipo(payload.default_tipo)
+    if payload.default_tipo:
+        crud.set_default_tipo(payload.default_tipo)
     for objetivo in payload.objetivos:
         crud.upsert_objetivo(
             objetivo.tipo,
@@ -177,4 +192,16 @@ def actualizar_perfil(payload: PerfilUpdate):
             objetivo.hidratos,
             objetivo.grasas,
         )
+    return {"status": "ok"}
+
+
+@app.post("/perfil/objetivos")
+def crear_objetivo(payload: ObjetivoDia):
+    crud.upsert_objetivo(
+        payload.tipo,
+        payload.kcal,
+        payload.proteina,
+        payload.hidratos,
+        payload.grasas,
+    )
     return {"status": "ok"}

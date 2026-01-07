@@ -224,6 +224,45 @@ def _generar_items_comida(comida: str, objetivo: dict) -> list[dict]:
                     **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
                 }
             )
+    grasa = _seleccionar_alimento("grasa", comida, evita_cereal=evita_cereal, macro_requerido="grasas")
+    if grasa:
+        gramos = _gramos_para_macro(grasa, "grasas", grasas_obj)
+        if gramos > 0:
+            macros = _calcular_gramos(grasa, gramos)
+            items.append(
+                {
+                    "ean": grasa["ean"],
+                    "nombre": grasa["nombre"],
+                    "rol_principal": "grasa",
+                    **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
+                }
+            )
+    hidratos_obj = max(objetivo["hidratos"] - postre_macros["hidratos"], 0)
+    grasas_obj = max(objetivo["grasas"] - postre_macros["grasas"], 0)
+    hidrato = _seleccionar_alimento("hidrato", comida, requiere_cereal=requiere_cereal, evita_cereal=evita_cereal)
+    if hidrato:
+        gramos = _gramos_para_macro(hidrato, "hidratos", hidratos_obj)
+        macros = _calcular_gramos(hidrato, gramos)
+        items.append(
+            {
+                "ean": hidrato["ean"],
+                "nombre": hidrato["nombre"],
+                "rol_principal": "hidrato",
+                **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
+            }
+        )
+    grasa = _seleccionar_alimento("grasa", comida, evita_cereal=evita_cereal)
+    if grasa:
+        gramos = _gramos_para_macro(grasa, "grasas", grasas_obj)
+        macros = _calcular_gramos(grasa, gramos)
+        items.append(
+            {
+                "ean": grasa["ean"],
+                "nombre": grasa["nombre"],
+                "rol_principal": "grasa",
+                **{k: macros[k] for k in ("gramos", "kcal", "proteina", "hidratos", "grasas")},
+            }
+        )
     return items
 
 

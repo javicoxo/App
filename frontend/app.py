@@ -279,14 +279,14 @@ elif st.session_state.section == "Perfil":
             with tab:
                 valores = objetivos.get(tipo, {})
                 kcal_base = float(valores.get("kcal", 0))
-                proteina_base = float(valores.get("proteina", 0))
-                hidratos_base = float(valores.get("hidratos", 0))
-                grasas_base = float(valores.get("grasas", 0))
                 kcal = st.number_input(f"Kcal ({tipo})", value=kcal_base, step=10.0)
-                scale = kcal / kcal_base if kcal_base else 0
-                proteina = proteina_base * scale
-                hidratos = hidratos_base * scale
-                grasas = grasas_base * scale
+                if tipo == "Entreno":
+                    pct_proteina, pct_hidratos, pct_grasas = 0.25, 0.50, 0.25
+                else:
+                    pct_proteina, pct_hidratos, pct_grasas = 0.32, 0.33, 0.35
+                proteina = (kcal * pct_proteina) / 4 if kcal else 0
+                hidratos = (kcal * pct_hidratos) / 4 if kcal else 0
+                grasas = (kcal * pct_grasas) / 9 if kcal else 0
                 st.caption(
                     f"Proteínas: {proteina:.1f} g · Hidratos: {hidratos:.1f} g · Grasas: {grasas:.1f} g"
                 )

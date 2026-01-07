@@ -71,7 +71,7 @@ class ConsumoUpdate(BaseModel):
 
 
 class PantryUpdate(BaseModel):
-    ean: str
+    ean: str | None = None
     nombre: str
     estado: str = Field(pattern="^(disponible|agotado)$")
 

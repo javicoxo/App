@@ -89,7 +89,13 @@ def _seleccionar_alimento(
         if macro_requerido and alimento.get(f"{macro_requerido}_100g", 0) <= 0:
             continue
         candidatos.append(alimento)
-    return random.choice(candidatos) if candidatos else None
+    if not candidatos:
+        return None
+    disponibles = _despensa_disponible()
+    en_despensa = [item for item in candidatos if item.get("ean") in disponibles]
+    if en_despensa:
+        return random.choice(en_despensa)
+    return random.choice(candidatos)
 
 
 def _calcular_gramos(alimento: dict, gramos: float) -> dict:

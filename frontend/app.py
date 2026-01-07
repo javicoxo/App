@@ -127,8 +127,7 @@ SECTIONS = [
     "Programación",
     "Perfil",
     "Generador",
-    "Despensa",
-    "Lista de la compra",
+    "Despensa y compra",
     "Estadísticas",
     "Consumo real",
 ]
@@ -334,16 +333,54 @@ elif st.session_state.section == "Generador":
         st.info("Crea un día antes de generar.")
 
 
-elif st.session_state.section == "Despensa":
-    st.subheader("Despensa disponible")
-    st.dataframe(get("/despensa", {"estado": "disponible"}))
-    st.subheader("Despensa agotada")
-    st.dataframe(get("/despensa", {"estado": "agotado"}))
-
-
-elif st.session_state.section == "Lista de la compra":
-    st.subheader("Lista automática")
-    st.dataframe(get("/lista-compra"))
+elif st.session_state.section == "Despensa y compra":
+    st.subheader("Despensa y lista de la compra")
+    tabs = st.tabs(["Despensa", "Lista de la compra"])
+    with tabs[0]:
+        st.markdown("### Añadir alimento manual")
+        with st.form("despensa-manual"):
+            ean_manual = st.text_input("EAN (opcional)")
+            nombre_manual = st.text_input("Nombre del alimento")
+            estado_manual = st.selectbox("Estado", ["disponible", "agotado"])
+            submit_despensa = st.form_submit_button("Guardar")
+        if submit_despensa:
+            if not nombre_manual.strip():
+                st.warning("El nombre es obligatorio.")
+            else:
+                requests.post(
+                    f"{API_URL}/despensa",
+                    json={"ean": ean_manual or None, "nombre": nombre_manual, "estado": estado_manual},
+                    timeout=10,
+                )
+                st.cache_data.clear()
+                st.success("Despensa actualizada.")
+                st.rerun()
+        st.markdown("### Disponibles")
+        st.dataframe(get("/despensa", {"estado": "disponible"}))
+        st.markdown("### Agotados")
+        st.dataframe(get("/despensa", {"estado": "agotado"}))
+    with tabs[1]:
+        st.markdown("### Lista automática")
+        rango = st.selectbox("Cobertura", ["7 días", "Hoy"])
+        rango_dias = 7 if rango == "7 días" else 1
+        lista = get("/lista-compra/auto", {"rango_dias": rango_dias})
+        if not lista:
+            st.info("No hay faltantes detectados.")
+        else:
+            for item in lista:
+                cols = st.columns([4, 2, 2])
+                nombre = item.get("nombre", "")
+                gramos = item.get("gramos", 0)
+                cols[0].markdown(f"**{nombre}**")
+                cols[1].markdown(f"{gramos:.0f} g")
+                if cols[2].button("Marcar comprado", key=f"comprar-{item.get('ean')}-{nombre}"):
+                    requests.post(
+                        f"{API_URL}/despensa",
+                        json={"ean": item.get("ean"), "nombre": nombre, "estado": "disponible"},
+                        timeout=10,
+                    )
+                    st.cache_data.clear()
+                    st.rerun()
 
 
 elif st.session_state.section == "Estadísticas":

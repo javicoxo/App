@@ -1,3 +1,6 @@
+from datetime import date, datetime, timedelta
+from uuid import uuid4
+
 from fastapi import FastAPI, HTTPException
 
 from . import crud
@@ -159,7 +162,10 @@ def listar_despensa(estado: str = "disponible"):
 
 @app.post("/despensa")
 def actualizar_despensa(update: PantryUpdate):
-    crud.upsert_despensa(update.ean, update.nombre, update.estado)
+    ean = update.ean.strip() if update.ean else ""
+    if not ean:
+        ean = f"MANUAL-{uuid4().hex[:8]}"
+    crud.upsert_despensa(ean, update.nombre, update.estado)
     return {"status": "ok"}
 
 
@@ -171,7 +177,45 @@ def listar_compra():
 @app.post("/lista-compra")
 def actualizar_compra(update: ShoppingUpdate):
     crud.update_lista_compra(update.item_id, update.comprado)
+    if update.comprado:
+        item = crud.get_lista_compra_item(update.item_id)
+        if item:
+            ean = item["ean"] or f"MANUAL-{uuid4().hex[:8]}"
+            crud.upsert_despensa(ean, item["nombre"], "disponible")
+            crud.delete_lista_compra_item(update.item_id)
     return {"status": "ok"}
+
+
+@app.get("/lista-compra/auto")
+def listar_compra_auto(rango_dias: int = 7):
+    dias = crud.list_dias()
+    disponibles = crud.list_despensa("disponible")
+    disponibles_ean = {item["ean"] for item in disponibles if item.get("ean")}
+    disponibles_nombres = {item["nombre"].strip().lower() for item in disponibles if item.get("nombre")}
+    hoy = date.today()
+    limite = hoy + timedelta(days=max(rango_dias, 1) - 1)
+    acumulados: dict[tuple[str, str], float] = {}
+    for dia in dias:
+        fecha = datetime.strptime(dia["fecha"], "%d/%m/%Y").date()
+        if fecha < hoy or fecha > limite:
+            continue
+        comidas = crud.list_comidas(dia["id"])
+        for comida in comidas:
+            items = crud.list_comida_items(comida["id"])
+            for item in items:
+                ean = item.get("ean") or ""
+                nombre = item.get("nombre") or ""
+                key = (ean, nombre)
+                acumulados[key] = acumulados.get(key, 0) + float(item.get("gramos", 0))
+    lista = []
+    for (ean, nombre), gramos in acumulados.items():
+        if ean and ean in disponibles_ean:
+            continue
+        if not ean and nombre.strip().lower() in disponibles_nombres:
+            continue
+        lista.append({"ean": ean or None, "nombre": nombre, "gramos": round(gramos, 1)})
+    lista.sort(key=lambda item: (item["nombre"] or "").lower())
+    return lista
 
 
 @app.get("/perfil")

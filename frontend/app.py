@@ -15,16 +15,17 @@ st.markdown(
     """
     <style>
     :root {
-        --bg: #f7f8fb;
-        --panel: #ffffff;
-        --panel-2: #f1f4f9;
-        --accent: #2563eb;
-        --accent-2: #10b981;
-        --text: #0f172a;
-        --muted: #64748b;
+        --bg-1: #0b1f16;
+        --bg-2: #103629;
+        --panel: rgba(16, 54, 41, 0.65);
+        --panel-2: rgba(11, 31, 22, 0.55);
+        --accent: #34d399;
+        --accent-2: #22c55e;
+        --text: #f0fdf4;
+        --muted: #cbd5d1;
     }
     html, body, [class*="stApp"] {
-        background-color: var(--bg);
+        background: radial-gradient(circle at top, var(--bg-2), var(--bg-1) 55%);
         color: var(--text);
         font-family: "Inter", "Segoe UI", sans-serif;
     }
@@ -52,10 +53,11 @@ st.markdown(
     }
     .card {
         background: var(--panel);
-        border: 1px solid #e2e8f0;
+        border: 1px solid rgba(240, 253, 244, 0.15);
         border-radius: 18px;
         padding: 1.25rem;
-        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 24px 36px rgba(5, 15, 10, 0.45);
+        backdrop-filter: blur(18px);
     }
     .card h3, .card h4 {
         margin-top: 0;
@@ -70,7 +72,8 @@ st.markdown(
         background: var(--panel-2);
         border-radius: 14px;
         padding: 0.9rem 1rem;
-        border: 1px solid #e2e8f0;
+        border: 1px solid rgba(240, 253, 244, 0.12);
+        backdrop-filter: blur(14px);
     }
     .kpi span {
         color: var(--muted);
@@ -82,12 +85,13 @@ st.markdown(
         margin-top: 0.2rem;
     }
     .stButton > button {
-        background: var(--accent-2);
-        border: none;
-        color: #ffffff;
+        background: linear-gradient(135deg, #16a34a, #22c55e);
+        border: 1px solid rgba(240, 253, 244, 0.2);
+        color: #f8fafc;
         border-radius: 999px;
         padding: 0.45rem 1rem;
         font-weight: 600;
+        box-shadow: 0 10px 20px rgba(6, 78, 59, 0.4);
     }
     div[data-testid="stToggle"] input:checked + div {
         background-color: #22c55e !important;
@@ -147,6 +151,13 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+nav_cols = st.columns(len(SECTIONS))
+for idx, name in enumerate(SECTIONS):
+    if nav_cols[idx].button(name, use_container_width=True):
+        st.session_state.section = name
+        st.rerun()
+st.markdown("---")
 
 
 def get(endpoint: str, params: dict | None = None):
@@ -732,11 +743,3 @@ elif st.session_state.section == "Consumo real":
                     st.success("Registro guardado.")
     else:
         st.info("Crea un día antes de registrar consumo.")
-
-
-st.markdown("---")
-nav_cols = st.columns(len(SECTIONS))
-for idx, name in enumerate(SECTIONS):
-    if nav_cols[idx].button(name, use_container_width=True):
-        st.session_state.section = name
-        st.rerun()

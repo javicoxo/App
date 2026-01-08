@@ -5,29 +5,87 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "befitlab.db"
 
+ALIMENTOS_COLUMNS = {
+    "ean",
+    "nombre",
+    "marca",
+    "kcal_100g",
+    "proteina_100g",
+    "hidratos_100g",
+    "grasas_100g",
+    "rol_principal",
+    "grupo_funcional",
+    "subgrupo_funcional",
+}
+
+LEGACY_ALIMENTOS_COLUMNS = {
+    "grupo_mediterraneo",
+    "frecuencia_mediterranea",
+    "permitido_comidas",
+    "categorias",
+}
+
+
+def _create_alimentos_table(cursor: sqlite3.Cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS alimentos (
+            ean TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            marca TEXT,
+            kcal_100g REAL NOT NULL,
+            proteina_100g REAL NOT NULL,
+            hidratos_100g REAL NOT NULL,
+            grasas_100g REAL NOT NULL,
+            rol_principal TEXT NOT NULL,
+            grupo_funcional TEXT NOT NULL,
+            subgrupo_funcional TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _ensure_alimentos_schema(cursor: sqlite3.Cursor) -> None:
+    table_info = cursor.execute("PRAGMA table_info(alimentos)").fetchall()
+    if not table_info:
+        _create_alimentos_table(cursor)
+        return
+    columns = {row[1] for row in table_info}
+    if columns & LEGACY_ALIMENTOS_COLUMNS:
+        cursor.execute("ALTER TABLE alimentos RENAME TO alimentos_legacy")
+        _create_alimentos_table(cursor)
+        cursor.execute(
+            """
+            INSERT INTO alimentos (
+                ean, nombre, marca, kcal_100g, proteina_100g, hidratos_100g, grasas_100g,
+                rol_principal, grupo_funcional, subgrupo_funcional
+            )
+            SELECT
+                ean,
+                nombre,
+                marca,
+                kcal_100g,
+                proteina_100g,
+                hidratos_100g,
+                grasas_100g,
+                rol_principal,
+                COALESCE(grupo_mediterraneo, ''),
+                COALESCE(categorias, '')
+            FROM alimentos_legacy
+            """
+        )
+        cursor.execute("DROP TABLE alimentos_legacy")
+        return
+    missing = {"grupo_funcional", "subgrupo_funcional"} - columns
+    for column in sorted(missing):
+        cursor.execute(f"ALTER TABLE alimentos ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+
 
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as connection:
         cursor = connection.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS alimentos (
-                ean TEXT PRIMARY KEY,
-                nombre TEXT NOT NULL,
-                marca TEXT,
-                kcal_100g REAL NOT NULL,
-                proteina_100g REAL NOT NULL,
-                hidratos_100g REAL NOT NULL,
-                grasas_100g REAL NOT NULL,
-                rol_principal TEXT NOT NULL,
-                grupo_mediterraneo TEXT NOT NULL,
-                frecuencia_mediterranea TEXT NOT NULL,
-                permitido_comidas TEXT NOT NULL,
-                categorias TEXT NOT NULL
-            )
-            """
-        )
+        _ensure_alimentos_schema(cursor)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS dias (

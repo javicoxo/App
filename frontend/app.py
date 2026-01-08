@@ -5,6 +5,8 @@ from json import JSONDecodeError
 
 import requests
 import streamlit as st
+from PIL import Image
+from pyzbar.pyzbar import decode as decode_barcode
 
 
 API_URL = "http://localhost:8000"
@@ -216,6 +218,17 @@ def parse_response(response: requests.Response) -> dict | list:
 
 def format_fecha(fecha: date) -> str:
     return fecha.strftime("%d/%m/%Y")
+
+
+def decode_ean(image_bytes: bytes) -> str | None:
+    image = Image.open(io.BytesIO(image_bytes))
+    decoded = decode_barcode(image)
+    for item in decoded:
+        if item.type in {"EAN13", "EAN8", "UPCA", "UPCE", "UPC"}:
+            return item.data.decode("utf-8")
+    if decoded:
+        return decoded[0].data.decode("utf-8")
+    return None
 
 
 def go_to_section(name: str) -> None:
@@ -520,16 +533,16 @@ elif st.session_state.section == "Alimentos":
         delimitador = st.text_input("Delimitador", value=",", max_chars=1)
         archivo = st.file_uploader("CSV de alimentos", type=["csv"])
         columnas_requeridas = [
+            "ean",
             "nombre",
+            "marca",
             "kcal_100g",
             "proteina_100g",
             "hidratos_100g",
             "grasas_100g",
             "rol_principal",
-            "grupo_mediterraneo",
-            "frecuencia_mediterranea",
-            "permitido_comidas",
-            "categorias",
+            "grupo_funcional",
+            "subgrupo_funcional",
         ]
         if archivo is not None:
             contenido = archivo.getvalue().decode("utf-8-sig")
@@ -562,10 +575,8 @@ elif st.session_state.section == "Alimentos":
                                         "hidratos_100g": float(fila["hidratos_100g"]),
                                         "grasas_100g": float(fila["grasas_100g"]),
                                         "rol_principal": fila["rol_principal"],
-                                        "grupo_mediterraneo": fila["grupo_mediterraneo"],
-                                        "frecuencia_mediterranea": fila["frecuencia_mediterranea"],
-                                        "permitido_comidas": fila["permitido_comidas"],
-                                        "categorias": fila["categorias"],
+                                        "grupo_funcional": fila["grupo_funcional"],
+                                        "subgrupo_funcional": fila["subgrupo_funcional"],
                                     }
                                     session.post(f"{API_URL}/alimentos", json=payload, timeout=30)
                                     exitos += 1
@@ -588,10 +599,8 @@ elif st.session_state.section == "Alimentos":
             hidratos_100g = st.number_input("Hidratos / 100g", min_value=0.0, step=0.1)
             grasas_100g = st.number_input("Grasas / 100g", min_value=0.0, step=0.1)
             rol_principal = st.text_input("Rol nutricional")
-            grupo_mediterraneo = st.text_input("Grupo mediterráneo")
-            frecuencia_mediterranea = st.text_input("Frecuencia mediterránea")
-            permitido_comidas = st.text_input("Comidas permitidas (separadas por coma)")
-            categorias = st.text_input("Categorías")
+            grupo_funcional = st.text_input("Grupo funcional")
+            subgrupo_funcional = st.text_input("Subgrupo funcional")
             submit = st.form_submit_button("Guardar receta")
         if submit:
             if not nombre.strip():
@@ -608,18 +617,27 @@ elif st.session_state.section == "Alimentos":
                         "hidratos_100g": hidratos_100g,
                         "grasas_100g": grasas_100g,
                         "rol_principal": rol_principal,
-                        "grupo_mediterraneo": grupo_mediterraneo,
-                        "frecuencia_mediterranea": frecuencia_mediterranea,
-                        "permitido_comidas": permitido_comidas,
-                        "categorias": categorias,
+                        "grupo_funcional": grupo_funcional,
+                        "subgrupo_funcional": subgrupo_funcional,
                     },
                 )
                 st.success("Receta guardada.")
                 st.cache_data.clear()
     with tabs[2]:
         st.markdown("### Buscar en Open Food Facts")
+        if "off_query" not in st.session_state:
+            st.session_state.off_query = ""
+        st.markdown("#### Escáner EAN")
+        captura = st.camera_input("Escanear código de barras")
+        if captura is not None:
+            codigo = decode_ean(captura.getvalue())
+            if codigo:
+                st.session_state.off_query = codigo
+                st.success(f"EAN detectado: {codigo}")
+            else:
+                st.warning("No se pudo detectar un EAN en la imagen.")
         criterio = st.selectbox("Buscar por", ["Nombre", "EAN"])
-        consulta = st.text_input("Consulta")
+        consulta = st.text_input("Consulta", key="off_query")
         if st.button("Buscar en Open Food Facts"):
             if not consulta.strip():
                 st.warning("Introduce un valor de búsqueda.")
@@ -679,10 +697,8 @@ elif st.session_state.section == "Alimentos":
                     "Grasas / 100g", min_value=0.0, value=float(nutriments.get("fat_100g") or 0), step=0.1
                 )
                 rol_principal = st.text_input("Rol nutricional")
-                grupo_mediterraneo = st.text_input("Grupo mediterráneo")
-                frecuencia_mediterranea = st.text_input("Frecuencia mediterránea")
-                permitido_comidas = st.text_input("Comidas permitidas (separadas por coma)")
-                categorias = st.text_input("Categorías")
+                grupo_funcional = st.text_input("Grupo funcional")
+                subgrupo_funcional = st.text_input("Subgrupo funcional")
                 submit = st.form_submit_button("Importar alimento")
             if submit:
                 if not nombre.strip():
@@ -699,10 +715,8 @@ elif st.session_state.section == "Alimentos":
                             "hidratos_100g": hidratos_100g,
                             "grasas_100g": grasas_100g,
                             "rol_principal": rol_principal,
-                            "grupo_mediterraneo": grupo_mediterraneo,
-                            "frecuencia_mediterranea": frecuencia_mediterranea,
-                            "permitido_comidas": permitido_comidas,
-                            "categorias": categorias,
+                            "grupo_funcional": grupo_funcional,
+                            "subgrupo_funcional": subgrupo_funcional,
                         },
                     )
                     st.success("Alimento importado.")

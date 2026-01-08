@@ -15,14 +15,14 @@ st.markdown(
     """
     <style>
     :root {
-        --bg-1: #0b1f16;
-        --bg-2: #103629;
-        --panel: rgba(16, 54, 41, 0.65);
-        --panel-2: rgba(11, 31, 22, 0.55);
-        --accent: #34d399;
-        --accent-2: #22c55e;
-        --text: #f0fdf4;
-        --muted: #cbd5d1;
+        --bg-1: #1b5c45;
+        --bg-2: #2f7a5f;
+        --panel: rgba(46, 122, 95, 0.72);
+        --panel-2: rgba(27, 92, 69, 0.6);
+        --accent: #86efac;
+        --accent-2: #4ade80;
+        --text: #f8fffb;
+        --muted: #e2f5ea;
     }
     html, body, [class*="stApp"] {
         background: radial-gradient(circle at top, var(--bg-2), var(--bg-1) 55%);

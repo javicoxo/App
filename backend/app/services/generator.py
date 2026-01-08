@@ -49,7 +49,7 @@ def _alimentos_por_rol(rol: str) -> list[dict]:
         rol_principal = str(alimento.get("rol_principal", "")).lower()
         if rol_lower in rol_principal:
             candidatos.append(alimento)
-    return candidatos or alimentos
+    return candidatos
 
 
 def _despensa_disponible() -> set[str]:
@@ -88,20 +88,6 @@ def _es_embutido(alimento: dict) -> bool:
     texto = _texto_grupo(alimento)
     return "embutido" in texto
 
-
-def _candidatos_desayuno_snack(comida: str) -> list[dict]:
-    candidatos = []
-    for alimento in list_alimentos():
-        if (
-            _es_lacteo(alimento)
-            or _es_fruta(alimento)
-            or _es_cereal_o_pan(alimento)
-            or _es_huevo(alimento)
-            or _es_embutido(alimento)
-            or "proteina" in str(alimento.get("rol_principal", "")).lower()
-        ):
-            candidatos.append(alimento)
-    return candidatos
 
 def _candidatos_desayuno_snack(comida: str) -> list[dict]:
     candidatos = []

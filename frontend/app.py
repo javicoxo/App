@@ -5,6 +5,8 @@ from json import JSONDecodeError
 
 import requests
 import streamlit as st
+from PIL import Image
+from pyzbar.pyzbar import decode as decode_barcode
 
 
 API_URL = "http://localhost:8000"
@@ -216,6 +218,17 @@ def parse_response(response: requests.Response) -> dict | list:
 
 def format_fecha(fecha: date) -> str:
     return fecha.strftime("%d/%m/%Y")
+
+
+def decode_ean(image_bytes: bytes) -> str | None:
+    image = Image.open(io.BytesIO(image_bytes))
+    decoded = decode_barcode(image)
+    for item in decoded:
+        if item.type in {"EAN13", "EAN8", "UPCA", "UPCE", "UPC"}:
+            return item.data.decode("utf-8")
+    if decoded:
+        return decoded[0].data.decode("utf-8")
+    return None
 
 
 def go_to_section(name: str) -> None:
@@ -612,8 +625,19 @@ elif st.session_state.section == "Alimentos":
                 st.cache_data.clear()
     with tabs[2]:
         st.markdown("### Buscar en Open Food Facts")
+        if "off_query" not in st.session_state:
+            st.session_state.off_query = ""
+        st.markdown("#### Escáner EAN")
+        captura = st.camera_input("Escanear código de barras")
+        if captura is not None:
+            codigo = decode_ean(captura.getvalue())
+            if codigo:
+                st.session_state.off_query = codigo
+                st.success(f"EAN detectado: {codigo}")
+            else:
+                st.warning("No se pudo detectar un EAN en la imagen.")
         criterio = st.selectbox("Buscar por", ["Nombre", "EAN"])
-        consulta = st.text_input("Consulta")
+        consulta = st.text_input("Consulta", key="off_query")
         if st.button("Buscar en Open Food Facts"):
             if not consulta.strip():
                 st.warning("Introduce un valor de búsqueda.")

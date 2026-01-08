@@ -10,10 +10,8 @@ class AlimentoBase(BaseModel):
     hidratos_100g: float
     grasas_100g: float
     rol_principal: str
-    grupo_mediterraneo: str
-    frecuencia_mediterranea: str
-    permitido_comidas: str
-    categorias: str
+    grupo_funcional: str
+    subgrupo_funcional: str
 
 
 class AlimentoCreate(AlimentoBase):

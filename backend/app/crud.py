@@ -11,9 +11,8 @@ def add_alimento(alimento: dict) -> None:
             """
             INSERT OR REPLACE INTO alimentos
             (ean, nombre, marca, kcal_100g, proteina_100g, hidratos_100g, grasas_100g,
-             rol_principal, grupo_mediterraneo, frecuencia_mediterranea,
-             permitido_comidas, categorias)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             rol_principal, grupo_funcional, subgrupo_funcional)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 alimento.get("ean"),
@@ -24,10 +23,8 @@ def add_alimento(alimento: dict) -> None:
                 alimento["hidratos_100g"],
                 alimento["grasas_100g"],
                 alimento["rol_principal"],
-                alimento["grupo_mediterraneo"],
-                alimento["frecuencia_mediterranea"],
-                alimento["permitido_comidas"],
-                alimento["categorias"],
+                alimento["grupo_funcional"],
+                alimento["subgrupo_funcional"],
             ),
         )
 

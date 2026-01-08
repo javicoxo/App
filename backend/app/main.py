@@ -10,6 +10,7 @@ from .schemas import (
     ComidaItemCreate,
     ConsumoUpdate,
     DiaCreate,
+    FuenteAlimentosCreate,
     GeneracionRequest,
     GolosinaRequest,
     ObjetivoDia,
@@ -40,6 +41,22 @@ def crear_alimento(alimento: AlimentoCreate):
 @app.get("/alimentos")
 def listar_alimentos():
     return crud.list_alimentos()
+
+
+@app.post("/fuentes-alimentos")
+def crear_fuente_alimentos(payload: FuenteAlimentosCreate):
+    return crud.get_or_create_fuente(payload.nombre, payload.tipo)
+
+
+@app.get("/fuentes-alimentos")
+def listar_fuentes_alimentos():
+    return crud.list_fuentes_alimentos()
+
+
+@app.delete("/fuentes-alimentos/{fuente_id}")
+def eliminar_fuente_alimentos(fuente_id: int):
+    crud.delete_fuente_alimentos(fuente_id)
+    return {"status": "ok"}
 
 
 @app.post("/dias")

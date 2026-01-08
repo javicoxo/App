@@ -11,9 +11,8 @@ def add_alimento(alimento: dict) -> None:
             """
             INSERT OR REPLACE INTO alimentos
             (ean, nombre, marca, kcal_100g, proteina_100g, hidratos_100g, grasas_100g,
-             rol_principal, grupo_mediterraneo, frecuencia_mediterranea,
-             permitido_comidas, categorias)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             rol_principal, grupo_funcional, subgrupo_funcional, fuente_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 alimento.get("ean"),
@@ -24,10 +23,9 @@ def add_alimento(alimento: dict) -> None:
                 alimento["hidratos_100g"],
                 alimento["grasas_100g"],
                 alimento["rol_principal"],
-                alimento["grupo_mediterraneo"],
-                alimento["frecuencia_mediterranea"],
-                alimento["permitido_comidas"],
-                alimento["categorias"],
+                alimento["grupo_funcional"],
+                alimento["subgrupo_funcional"],
+                alimento.get("fuente_id"),
             ),
         )
 
@@ -36,6 +34,42 @@ def list_alimentos() -> list[dict]:
     with get_connection() as connection:
         rows = connection.execute("SELECT * FROM alimentos").fetchall()
     return [dict(row) for row in rows]
+
+
+def get_or_create_fuente(nombre: str, tipo: str) -> dict:
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO fuentes_alimentos (nombre, tipo, creado_en)
+            VALUES (?, ?, ?)
+            """,
+            (nombre, tipo, datetime.utcnow().isoformat()),
+        )
+        row = connection.execute(
+            "SELECT * FROM fuentes_alimentos WHERE nombre = ?",
+            (nombre,),
+        ).fetchone()
+    return dict(row) if row else {}
+
+
+def list_fuentes_alimentos() -> list[dict]:
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT fuentes_alimentos.*, COUNT(alimentos.ean) as total_alimentos
+            FROM fuentes_alimentos
+            LEFT JOIN alimentos ON alimentos.fuente_id = fuentes_alimentos.id
+            GROUP BY fuentes_alimentos.id
+            ORDER BY fuentes_alimentos.creado_en DESC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_fuente_alimentos(fuente_id: int) -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM alimentos WHERE fuente_id = ?", (fuente_id,))
+        connection.execute("DELETE FROM fuentes_alimentos WHERE id = ?", (fuente_id,))
 
 
 def add_dia(fecha: str, tipo: str) -> str:
